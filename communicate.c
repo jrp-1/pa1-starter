@@ -13,7 +13,7 @@ void send_frame(char* char_buffer, enum SendFrame_DstType dst_type) {
     // Multiply out the probabilities to some degree of precision
     int prob_prec = 1000;
     int corrupt_prob = (int) prob_prec * glb_sysconfig.corrupt_prob;
-    int num_corrupt_bits = CORRUPTION_BITS;
+    int num_corrupt_bits = 1;
     int corrupt_indices[num_corrupt_bits];
 
     // Pick a random number

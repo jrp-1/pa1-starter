@@ -25,9 +25,6 @@ int main(int argc, char* argv[]) {
     int i;
     unsigned char print_usage = 0;
 
-    // DO NOT CHANGE THIS
-    // Set the number of bits to corrupt
-    CORRUPTION_BITS = (int) MAX_FRAME_SIZE / 8;
 
     // DO NOT CHANGE THIS
     // Prepare the glb_sysconfig object
@@ -154,28 +151,39 @@ int main(int argc, char* argv[]) {
     int active = 1;
     int lena = 0;
     int lenb = 0;
+    int sender_active = 1;
+    int receiver_active = 1;
 
     while(active == 1){
         active = 0;
         for(i = 0; i< glb_senders_array_length; i++){
             Sender* a = &glb_senders_array[i];
+            pthread_mutex_lock(&a->buffer_mutex);
             lena = ll_get_length(a->input_cmdlist_head);
-            if(lena > 0){
+            sender_active = a->active;
+            pthread_mutex_unlock(&a->buffer_mutex);
+            if(lena > 0 || sender_active){
                 active = 1;
             }
         }
         for(i = 0; i< glb_senders_array_length; i++){
             Sender* a = &glb_senders_array[i];
+            pthread_mutex_lock(&a->buffer_mutex);
             lena = ll_get_length(a->input_framelist_head);
-            if(lena > 0){
+            sender_active = a->active;
+            pthread_mutex_unlock(&a->buffer_mutex);
+            if(lena > 0  || sender_active){
                 active = 1;
             }
         }
         
         for(i=0; i< glb_receivers_array_length; i++){
             Receiver* b = &glb_receivers_array[i];
+            pthread_mutex_lock(&b->buffer_mutex);
             lenb = ll_get_length(b->input_framelist_head);
-            if(lenb > 0){
+            receiver_active = b->active;
+            pthread_mutex_unlock(&b->buffer_mutex);
+            if(lenb > 0 || receiver_active){
                 active = 1;
             }
         }
@@ -183,22 +191,32 @@ int main(int argc, char* argv[]) {
             sleep(2);
             for(i = 0; i< glb_senders_array_length; i++){
                 Sender* a = &glb_senders_array[i];
+                pthread_mutex_lock(&a->buffer_mutex);
                 lena = ll_get_length(a->input_cmdlist_head);
-                if(lena > 0){
+                sender_active = a->active;
+                pthread_mutex_unlock(&a->buffer_mutex);
+                if(lena > 0 || sender_active){
                     active = 1;
                 }
             }
             for(i = 0; i< glb_senders_array_length; i++){
                 Sender* a = &glb_senders_array[i];
+                pthread_mutex_lock(&a->buffer_mutex);
                 lena = ll_get_length(a->input_framelist_head);
-                if(lena > 0){
+                sender_active = a->active;
+                pthread_mutex_unlock(&a->buffer_mutex);
+                if(lena > 0 || sender_active){
                     active = 1;
                 }
             }
+
             for(i=0; i< glb_receivers_array_length; i++){
                 Receiver* b = &glb_receivers_array[i];
+                pthread_mutex_lock(&b->buffer_mutex);
                 lenb = ll_get_length(b->input_framelist_head);
-                if(lenb > 0){
+                receiver_active = b->active;
+                pthread_mutex_unlock(&b->buffer_mutex);
+                if(lenb > 0 || receiver_active){
                     active = 1;
                 }
             }

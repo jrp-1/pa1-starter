@@ -60,6 +60,7 @@ struct Receiver_t {
     LLnode* input_framelist_head;
 
     int recv_id;
+    int active;
 };
 
 struct Sender_t {
@@ -75,6 +76,8 @@ struct Sender_t {
     LLnode* input_cmdlist_head;
     LLnode* input_framelist_head;
     int send_id;
+    int active;
+    int awaiting_msg_ack;
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
@@ -108,13 +111,11 @@ DO NOT CHANGE:
   3) glb_senders_array_length
   4) glb_receivers_array_length
   5) glb_sysconfig
-  6) CORRUPTION_BITS
 */
 Sender* glb_senders_array;
 Receiver* glb_receivers_array;
 int glb_senders_array_length;
 int glb_receivers_array_length;
 SysConfig glb_sysconfig;
-int CORRUPTION_BITS;
 
 #endif

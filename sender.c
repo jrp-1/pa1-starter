@@ -8,6 +8,8 @@ void init_sender(Sender* sender, int id) {
     sender->send_id = id;
     sender->input_cmdlist_head = NULL;
     sender->input_framelist_head = NULL;
+    sender->active = 1;
+    sender->awaiting_msg_ack = 0;
     // TODO: You should fill in this function as necessary
 }
 
@@ -151,10 +153,10 @@ void* run_sender(void* input_sender) {
         // Implement this
         handle_input_cmds(sender, &outgoing_frames_head);
 
-        pthread_mutex_unlock(&sender->buffer_mutex);
-
+        sender->active = (ll_get_length(outgoing_frames_head) > 0 || sender->awaiting_msg_ack) ? 1:0;
         // Implement this
         handle_timedout_frames(sender, &outgoing_frames_head);
+        pthread_mutex_unlock(&sender->buffer_mutex);
 
         // DO NOT CHANGE BELOW CODE
         // Send out all the frames

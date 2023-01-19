@@ -5,6 +5,7 @@ void init_receiver(Receiver* receiver, int id) {
     pthread_mutex_init(&receiver->buffer_mutex, NULL);
     receiver->recv_id = id;
     receiver->input_framelist_head = NULL;
+    receiver->active = 1;
 }
 
 void handle_incoming_frames(Receiver* receiver,
@@ -91,7 +92,7 @@ void* run_receiver(void* input_receiver) {
         }
 
         handle_incoming_frames(receiver, &outgoing_frames_head);
-
+        receiver->active = ll_get_length(outgoing_frames_head) > 0 ? 1:0;
         pthread_mutex_unlock(&receiver->buffer_mutex);
 
         // DO NOT CHANGE BELOW CODE
