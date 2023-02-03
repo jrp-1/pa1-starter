@@ -108,6 +108,15 @@ Frame* convert_char_to_frame(char* char_buf) {
     return frame;
 }
 
+void copy_frame(Frame* frame1, Frame* frame2) {
+    frame1->remaining_msg_bytes = frame2->remaining_msg_bytes;
+    frame1->src_id = frame2->src_id;
+    frame1->dst_id = frame2->dst_id;
+    frame1->seq_no = frame2->seq_no;
+    memcpy(frame1->data, frame2->data, FRAME_PAYLOAD_SIZE);
+    frame1->crc8 = frame2->crc8;
+}
+
 uint8_t compute_crc8(char* char_buf){
     uint8_t generator=0x07;
     uint8_t remainder=char_buf[0];

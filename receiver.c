@@ -50,19 +50,25 @@ void handle_incoming_frames(Receiver* receiver,
             // crc 0 -- frame not corrupted
             Frame* inframe = convert_char_to_frame(raw_char_buf);
 
+            receiver->seq_no = inframe->seq_no;
+            receiver->last_frame_recv = inframe->seq_no;
+
             // Free raw_char_buf
             free(raw_char_buf);
 
             printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
             // send ack
-            send_ack(receiver, outgoing_frames_head_ptr, 0, inframe->src_id);
+            send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
 
             free(inframe);
             free(ll_inmsg_node);
         }
         else {
+            // drop frame
             printf("\nCRC MISMATCH: wait for resend\n");
+            free(raw_char_buf);
+            free(ll_inmsg_node);
         }
         
     }

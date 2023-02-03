@@ -62,6 +62,7 @@ struct Receiver_t {
     int recv_id;
     int active;
 
+    uint8_t last_frame_recv;
     uint8_t seq_no; // sequence number
 };
 
@@ -82,6 +83,7 @@ struct Sender_t {
     int awaiting_msg_ack;
 
     uint8_t seq_no; // sequence number
+    uint8_t last_ack_recv;
     Frame* lfs; //last frame sent;
     struct timeval time_sent; // time last frame was sent
     struct timeval timeout;   // timeout (expiring)

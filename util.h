@@ -29,6 +29,8 @@ long timeval_usecdiff(struct timeval*, struct timeval*);
 char* convert_frame_to_char(Frame*);
 Frame* convert_char_to_frame(char*);
 
+void copy_frame(Frame*, Frame*);
+
 // CRC-8 Computation
 uint8_t compute_crc8(char* frameChar);
 

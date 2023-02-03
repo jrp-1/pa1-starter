@@ -28,8 +28,9 @@ void set_timeout(Sender* sender) {
     sender->timeout.tv_sec = sender->time_sent.tv_sec;
     sender->timeout.tv_usec = sender->time_sent.tv_usec + 90000;
     if (sender->timeout.tv_usec > 1000000) { // check for overlow
-        sender->timeout.tv_sec--;
+        sender->timeout.tv_sec++;
         sender->timeout.tv_usec -= 1000000;
+        printf("TIMEOUT OVERFLOW\n");
     }
     printf("SET TIMEOUT\n");
 
@@ -44,12 +45,15 @@ void rebuild_frame(Sender* sender, Frame* outgoing_frame) {
     outgoing_frame->crc8 = sender->lfs->crc8;
 }
 
-void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst) {
+void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst, uint8_t sequence_no, remaining_bytes) {
     // builds a frame
     assert(outgoing_frame);
-    memcpy(outgoing_frame->data, message, FRAME_PAYLOAD_SIZE);
+    outgoing_frame->remaining_msg_bytes = remaining_bytes;
     outgoing_frame->src_id = src;
     outgoing_frame->dst_id = dst;
+    outgoing_frame->seq_no = sequence_no;
+
+    memcpy(outgoing_frame->data, message, FRAME_PAYLOAD_SIZE);
 
     // Add CRC
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
@@ -61,10 +65,7 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
 
 void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame) {
     // set last frame sent
-    sender->lfs->src_id = outgoing_frame->src_id;
-    sender->lfs->dst_id = outgoing_frame->dst_id;
-    memcpy(sender->lfs->data, outgoing_frame->data, FRAME_PAYLOAD_SIZE);
-    sender->lfs->crc8 = outgoing_frame->crc8;
+    copy_frame(sender->lfs, outgoing_frame);
 
     // set time frame sent
     gettimeofday(&sender->time_sent, NULL);
@@ -75,6 +76,7 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoin
     // TODO: crc, ack
     // set we are waiting for ack
     sender->awaiting_msg_ack = 1;
+    sender->seq_no = outgoing_frame->seq_no;
 
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
@@ -88,7 +90,6 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     //    3) Implement logic as per stop and wait ARQ to track ACK for what frame is expected,
     //       and what to do when ACK for expected frame is received
 
-    // 
     if (sender->awaiting_msg_ack) {
         int incoming_frames_length = ll_get_length(sender->input_framelist_head);
         while (incoming_frames_length > 0) {
@@ -99,17 +100,19 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             char* raw_char_buf = ll_inmsg_node->value;
             Frame* inframe = convert_char_to_frame(raw_char_buf);
 
-            if(!strcmp(inframe->data, "ACK")) { // 0 if equal
+            if(!(strcmp(inframe->data, "ACK") && compute_crc8(raw_char_buf)) && sender->seq_no == inframe->seq_no) { 
+                // 0 if equal for both, if not both then need to resend to get ACK
                 // check for ACK
+                sender->last_ack_recv = inframe->seq_no;
                 printf("ACK RECV_%d>:[%s]\n", sender->send_id, inframe->data);
                 sender->awaiting_msg_ack = 0;
+            } else {
+                printf("\nACK CRC MISMATCH\n");
             }
 
             // Free raw_char_buf
             free(raw_char_buf);
         }
-
-        // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
     }
 }
 
@@ -136,6 +139,8 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
         int msg_length = strlen(outgoing_cmd->message) + 1;
         if (msg_length > FRAME_PAYLOAD_SIZE) {
             // Do something about messages that exceed the frame size
+
+            // TODO: data structure to store messages, sequence number, bytes remaining (then add 1 by 1) -- check if awaiting ack before sending next
             printf(
                 // split message intoframes
                 "<SEND_%d>: sending messages of length greater than %d is not "
@@ -144,7 +149,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
         } else {
             Frame* outgoing_frame = malloc(sizeof(Frame));
 
-            build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, outgoing_cmd->message, outgoing_cmd->src_id, outgoing_cmd->dst_id);
+            build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, outgoing_cmd->message, outgoing_cmd->src_id, outgoing_cmd->dst_id, 0, 0);
             // Frame* outgoing_frame = malloc(sizeof(Frame));
             // assert(outgoing_frame);
             // strcpy(outgoing_frame->data, outgoing_cmd->message);
@@ -169,12 +174,16 @@ void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     struct timeval curr_time;
     gettimeofday(&curr_time, NULL);
     long timer = timeval_usecdiff(&curr_time, &(sender->timeout));
-    if (timer < 0 && sender->awaiting_msg_ack) {
-        Frame* outgoing_frame = malloc(sizeof(Frame));
-        rebuild_frame(sender, outgoing_frame);
-        printf("attempting resend\n");
-        printf("time since last send in usec:%d\n", curr_time.tv_usec - sender->time_sent.tv_usec);
-        add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
+    if (timer < 0) { // check  to see if timed out
+        if (sender->awaiting_msg_ack) { // make sure we're waiting for an ACK
+            // make new frame from LFS
+            printf("timervalue:%d|||curr_time_usec:%d|||timeout_usec%d\n", timer, (curr_time.tv_sec * 1000000 + curr_time.tv_usec), (sender->timeout.tv_sec * 1000000 + sender->timeout.tv_usec));
+            Frame* outgoing_frame = malloc(sizeof(Frame));
+            rebuild_frame(sender, outgoing_frame);
+            printf("attempting resend\n");
+            printf("time since last send in usec:%d\n", curr_time.tv_usec - sender->time_sent.tv_usec);
+            add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
+        }
     }
 }
 
