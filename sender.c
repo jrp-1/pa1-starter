@@ -35,12 +35,26 @@ void set_timeout(Sender* sender) {
 
 }
 
+void rebuild_frame(Sender* sender, Frame* outgoing_frame) {
+    //rebuild for last frame sent
+    assert(outgoing_frame);
+    memcpy(outgoing_frame->data, sender->lfs->data, FRAME_PAYLOAD_SIZE);
+    outgoing_frame->src_id = sender->lfs->src_id;
+    outgoing_frame->dst_id = sender->lfs->dst_id;
+    outgoing_frame->crc8 = sender->lfs->crc8;
+}
+
 void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst) {
     // builds a frame
     assert(outgoing_frame);
     memcpy(outgoing_frame->data, message, FRAME_PAYLOAD_SIZE);
     outgoing_frame->src_id = src;
     outgoing_frame->dst_id = dst;
+
+    // Add CRC
+    char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+    outgoing_frame->crc8 = compute_crc8(outgoing_charbuf);
+    outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     // At this point, we don't need the outgoing_cmd
     free(message);
 }
@@ -50,6 +64,7 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoin
     sender->lfs->src_id = outgoing_frame->src_id;
     sender->lfs->dst_id = outgoing_frame->dst_id;
     memcpy(sender->lfs->data, outgoing_frame->data, FRAME_PAYLOAD_SIZE);
+    sender->lfs->crc8 = outgoing_frame->crc8;
 
     // set time frame sent
     gettimeofday(&sender->time_sent, NULL);
@@ -73,12 +88,11 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     //    3) Implement logic as per stop and wait ARQ to track ACK for what frame is expected,
     //       and what to do when ACK for expected frame is received
 
+    // 
     if (sender->awaiting_msg_ack) {
         int incoming_frames_length = ll_get_length(sender->input_framelist_head);
         while (incoming_frames_length > 0) {
             // Pop a node off the front of the link list and update the count
-            printf("AWAITINGACK\n");
-
             LLnode* ll_inmsg_node = ll_pop_node(&sender->input_framelist_head);
             incoming_frames_length = ll_get_length(sender->input_framelist_head);
 
@@ -151,6 +165,17 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
 void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     // TODO: Handle frames that have timed out
+    // check time
+    struct timeval curr_time;
+    gettimeofday(&curr_time, NULL);
+    long timer = timeval_usecdiff(&curr_time, &(sender->timeout));
+    if (timer < 0 && sender->awaiting_msg_ack) {
+        Frame* outgoing_frame = malloc(sizeof(Frame));
+        rebuild_frame(sender, outgoing_frame);
+        printf("attempting resend\n");
+        printf("time since last send in usec:%d\n", curr_time.tv_usec - sender->time_sent.tv_usec);
+        add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
+    }
 }
 
 void* run_sender(void* input_sender) {

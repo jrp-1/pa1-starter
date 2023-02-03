@@ -44,18 +44,27 @@ void handle_incoming_frames(Receiver* receiver,
         incoming_frames_length = ll_get_length(receiver->input_framelist_head);
 
         char* raw_char_buf = ll_inmsg_node->value;
-        Frame* inframe = convert_char_to_frame(raw_char_buf);
 
-        // Free raw_char_buf
-        free(raw_char_buf);
+        // check crc8
+        if (!compute_crc8(raw_char_buf)) {
+            // crc 0 -- frame not corrupted
+            Frame* inframe = convert_char_to_frame(raw_char_buf);
 
-        printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+            // Free raw_char_buf
+            free(raw_char_buf);
 
-        // send ack
-        send_ack(receiver, outgoing_frames_head_ptr, 0, inframe->src_id);
+            printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
-        free(inframe);
-        free(ll_inmsg_node);
+            // send ack
+            send_ack(receiver, outgoing_frames_head_ptr, 0, inframe->src_id);
+
+            free(inframe);
+            free(ll_inmsg_node);
+        }
+        else {
+            printf("\nCRC MISMATCH: wait for resend\n");
+        }
+        
     }
 }
 
