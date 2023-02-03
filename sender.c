@@ -201,7 +201,7 @@ void handle_long_msg(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     if (sender->next_frame < sender->frame_ctr && sender->awaiting_msg_ack == 0) {
         // printf("Adding frame: %d\n", sender->next_frame);
         add_frame(sender, outgoing_frames_head_ptr, sender->frames[sender->next_frame]);
-        (sender->next_frame)++;
+        sender->next_frame = sender->next_frame +1;
     }
 }
 
