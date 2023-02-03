@@ -78,7 +78,7 @@ void handle_incoming_frames(Receiver* receiver,
                     // free(receiver->frames[i]);
                     str_pos += FRAME_PAYLOAD_SIZE;
                 }
-                printf("<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
+                fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
 
             }
 
