@@ -42,10 +42,7 @@ void set_timeout(Sender* sender) {
 void rebuild_frame(Sender* sender, Frame* outgoing_frame) {
     //rebuild for last frame sent
     assert(outgoing_frame);
-    memcpy(outgoing_frame->data, sender->lfs->data, FRAME_PAYLOAD_SIZE);
-    outgoing_frame->src_id = sender->lfs->src_id;
-    outgoing_frame->dst_id = sender->lfs->dst_id;
-    outgoing_frame->crc8 = sender->lfs->crc8;
+    copy_frame(outgoing_frame, sender->lfs);
 }
 
 void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst, uint8_t sequence_no, uint16_t remaining_bytes) {
