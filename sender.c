@@ -187,8 +187,6 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
             build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, outgoing_cmd->message, outgoing_cmd->src_id, outgoing_cmd->dst_id, 0, 0);
 
-            // free(outgoing_cmd);
-
             add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
 
         }
