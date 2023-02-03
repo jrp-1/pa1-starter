@@ -13,6 +13,9 @@ void init_sender(Sender* sender, int id) {
     // TODO: You should fill in this function as necessary
     sender->lfs = malloc(sizeof(Frame)); //last frame sent
     gettimeofday(&sender->time_sent, NULL);
+    sender->frame_ctr = 0;
+    sender->seq_no = 0;
+    sender->next_frame = 0;
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
@@ -53,7 +56,7 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
     outgoing_frame->dst_id = dst;
     outgoing_frame->seq_no = sequence_no;
 
-    memcpy(outgoing_frame->data, message, FRAME_PAYLOAD_SIZE);
+    memcpy(outgoing_frame->data, message, (sizeof(char) * FRAME_PAYLOAD_SIZE));
 
     // Add CRC
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
@@ -151,14 +154,15 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             uint16_t remaining_bytes = msg_length - FRAME_PAYLOAD_SIZE;
             // number of messages
             printf("Sending%dmessages\n", sender->frame_ctr);
-            *(sender->frames) = malloc(sender->frame_ctr);
+            // *(sender->frames) = malloc(sizeof(Frame) * sender->frame_ctr);
             char* str_pos = outgoing_cmd->message; // pointer to where we are
-            for (int i = 0; i < sender->frame_ctr; i++) {
+            for (uint8_t i = 0; i < sender->frame_ctr; i++) {
                 sender->frames[i] = malloc(sizeof(Frame));
-                char* char_buf = malloc(sizeof(FRAME_PAYLOAD_SIZE)); // buffer for each payload
+                char* char_buf = malloc(sizeof(char) * FRAME_PAYLOAD_SIZE); // buffer for each payload
                 memcpy(char_buf, str_pos, FRAME_PAYLOAD_SIZE);
                 // increment our position pointer
                 str_pos += FRAME_PAYLOAD_SIZE;
+                assert(sender->frames[i]);
                 build_frame(sender, outgoing_frames_head_ptr, sender->frames[i], char_buf, outgoing_cmd->src_id, outgoing_cmd->dst_id, i, remaining_bytes);
                 if (remaining_bytes - FRAME_PAYLOAD_SIZE < 0) {
                     remaining_bytes = 0;
@@ -172,21 +176,20 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             Frame* outgoing_frame = malloc(sizeof(Frame));
 
             build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, outgoing_cmd->message, outgoing_cmd->src_id, outgoing_cmd->dst_id, 0, 0);
-            // Frame* outgoing_frame = malloc(sizeof(Frame));
-            // assert(outgoing_frame);
-            // strcpy(outgoing_frame->data, outgoing_cmd->message);
-            // outgoing_frame->src_id = outgoing_cmd->src_id;
-            // outgoing_frame->dst_id = outgoing_cmd->dst_id;
-            // // At this point, we don't need the outgoing_cmd
-            // free(outgoing_cmd->message);
+
             free(outgoing_cmd);
 
             add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
-            // Convert the message to the outgoing_charbuf
-            // char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
-            // ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
-            // free(outgoing_frame);
+
         }
+    }
+}
+
+void handle_long_msg(Sender* sender, LLnode** outgoing_frames_head_ptr) {
+    if (sender->next_frame < sender->frame_ctr && sender->awaiting_msg_ack == 0) {
+        printf("Adding frame: %d\n", sender->next_frame);
+        add_frame(sender, outgoing_frames_head_ptr, sender->frames[sender->next_frame]);
+        (sender->next_frame)++;
     }
 }
 
@@ -285,6 +288,9 @@ void* run_sender(void* input_sender) {
 
         // Implement this
         handle_input_cmds(sender, &outgoing_frames_head);
+        // if msg length longer than frame go here
+        handle_long_msg(sender, &outgoing_frames_head);
+
         sender->active = (ll_get_length(outgoing_frames_head) > 0 || sender->awaiting_msg_ack) ? 1:0;
 
         // Implement this
