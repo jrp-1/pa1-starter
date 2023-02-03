@@ -48,6 +48,10 @@ struct LLnode_t {
 };
 typedef struct LLnode_t LLnode;
 
+// Window Sizes
+const uint8_t SWS = 8;
+const uint8_t RWS = 8;
+
 // Receiver and Sender data structures
 struct Receiver_t {
     /* DO NOT CHANGE:
@@ -66,6 +70,9 @@ struct Receiver_t {
     uint8_t last_frame_recv;
     uint8_t seq_no; // sequence number
     Frame* frames[UINT8_MAX]; // array of frames
+    struct RecvQ_slot {
+        Frame* frame;
+    } RecvQ[RWS];
 };
 
 struct Sender_t {
@@ -92,6 +99,10 @@ struct Sender_t {
     struct timeval time_sent; // time last frame was sent
     struct timeval timeout;   // timeout (expiring)
     Frame* frames[UINT8_MAX]; // array of frames
+    struct SendQ_slot {
+        struct timeval timeout;
+        Frame* frame;
+    } SendQ[SWS];
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;

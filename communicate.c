@@ -56,6 +56,7 @@ void send_frame(char* char_buffer, enum SendFrame_DstType dst_type) {
         pthread_cond_signal(&dst->buffer_cv);
         pthread_mutex_unlock(&dst->buffer_mutex);
     }
+    free(inframe);
     free(char_buffer);
     return;
 }
