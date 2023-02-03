@@ -64,6 +64,7 @@ struct Receiver_t {
 
     uint8_t last_frame_recv;
     uint8_t seq_no; // sequence number
+    Frame* frames[UINT8_MAX]; // array of frames
 };
 
 struct Sender_t {

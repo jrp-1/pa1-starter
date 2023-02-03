@@ -45,6 +45,7 @@ void handle_incoming_frames(Receiver* receiver,
 
         char* raw_char_buf = ll_inmsg_node->value;
 
+
         // check crc8
         if (!compute_crc8(raw_char_buf)) {
             // crc 0 -- frame not corrupted
@@ -56,10 +57,30 @@ void handle_incoming_frames(Receiver* receiver,
             // Free raw_char_buf
             free(raw_char_buf);
 
-            printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+            receiver->frames[receiver->seq_no] = malloc(sizeof(Frame));
+            copy_frame(receiver->frames[receiver->seq_no], inframe);
+
+            // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+
 
             // send ack
             send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
+
+            // check if last frame, if so print
+            if (inframe->remaining_msg_bytes == 0) {
+                char char_buf[FRAME_PAYLOAD_SIZE * UINT8_MAX]; // huge string
+                // printf("HI\n\n");
+                char* str_pos = char_buf;
+                for (int i = 0; i <= receiver->last_frame_recv; i++) {
+                    // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
+                    memcpy(str_pos, receiver->frames[i]->data, FRAME_PAYLOAD_SIZE);
+                    // printf("|||%s\n", str_pos);
+                    free(receiver->frames[i]);
+                    str_pos += FRAME_PAYLOAD_SIZE;
+                }
+                printf("<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
+
+            }
 
             free(inframe);
             free(ll_inmsg_node);
