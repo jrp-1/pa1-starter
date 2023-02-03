@@ -12,12 +12,27 @@ void init_sender(Sender* sender, int id) {
     sender->awaiting_msg_ack = 0;
     // TODO: You should fill in this function as necessary
     sender->lfs = malloc(sizeof(Frame)); //last frame sent
+    gettimeofday(&sender->time_sent, NULL);
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
     // TODO: You should fill in this function so that it returns the 
     // timeval when next timeout should occur
-    return NULL;
+
+    return &sender->timeout;
+
+}
+
+void set_timeout(Sender* sender) {
+    // add .09s to time_sent
+    sender->timeout.tv_sec = sender->time_sent.tv_sec;
+    sender->timeout.tv_usec = sender->time_sent.tv_usec + 90000;
+    if (sender->timeout.tv_usec > 1000000) { // check for overlow
+        sender->timeout.tv_sec--;
+        sender->timeout.tv_usec -= 1000000;
+    }
+    printf("SET TIMEOUT\n");
+
 }
 
 void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst) {
@@ -36,7 +51,15 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoin
     sender->lfs->dst_id = outgoing_frame->dst_id;
     memcpy(sender->lfs->data, outgoing_frame->data, FRAME_PAYLOAD_SIZE);
 
+    // set time frame sent
+    gettimeofday(&sender->time_sent, NULL);
+    // set timeout
+    set_timeout(sender);
+
     // adds frame to queue
+    // TODO: crc, ack
+    // set we are waiting for ack
+    sender->awaiting_msg_ack = 1;
 
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
@@ -49,6 +72,31 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     //    2) Convert the incoming frame from char* to Frame* data type
     //    3) Implement logic as per stop and wait ARQ to track ACK for what frame is expected,
     //       and what to do when ACK for expected frame is received
+
+    if (sender->awaiting_msg_ack) {
+        int incoming_frames_length = ll_get_length(sender->input_framelist_head);
+        while (incoming_frames_length > 0) {
+            // Pop a node off the front of the link list and update the count
+            printf("AWAITINGACK\n");
+
+            LLnode* ll_inmsg_node = ll_pop_node(&sender->input_framelist_head);
+            incoming_frames_length = ll_get_length(sender->input_framelist_head);
+
+            char* raw_char_buf = ll_inmsg_node->value;
+            Frame* inframe = convert_char_to_frame(raw_char_buf);
+
+            if(!strcmp(inframe->data, "ACK")) { // 0 if equal
+                // check for ACK
+                printf("ACK RECV_%d>:[%s]\n", sender->send_id, inframe->data);
+                sender->awaiting_msg_ack = 0;
+            }
+
+            // Free raw_char_buf
+            free(raw_char_buf);
+        }
+
+        // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+    }
 }
 
 void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {

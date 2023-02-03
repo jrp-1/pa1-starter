@@ -1,11 +1,29 @@
 #include "receiver.h"
 
+const char* ack_msg = "ACK";
+
 void init_receiver(Receiver* receiver, int id) {
     pthread_cond_init(&receiver->buffer_cv, NULL);
     pthread_mutex_init(&receiver->buffer_mutex, NULL);
     receiver->recv_id = id;
     receiver->input_framelist_head = NULL;
     receiver->active = 1;
+}
+
+void send_ack(Receiver* receiver, LLnode** outgoing_frames_head_ptr, uint8_t sequence_no, uint8_t send_id) {
+    Frame* outgoing_frame = malloc(sizeof(Frame));
+    outgoing_frame->remaining_msg_bytes = 0;
+    outgoing_frame->dst_id = send_id;
+    outgoing_frame->src_id = receiver->recv_id;
+    outgoing_frame->seq_no = sequence_no;
+    strcpy(outgoing_frame->data, ack_msg);
+    // Add CRC
+    char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+    outgoing_frame->crc8 = compute_crc8(outgoing_charbuf);
+    outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+
+    ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+    free(outgoing_frame);
 }
 
 void handle_incoming_frames(Receiver* receiver,
@@ -32,6 +50,9 @@ void handle_incoming_frames(Receiver* receiver,
         free(raw_char_buf);
 
         printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+
+        // send ack
+        send_ack(receiver, outgoing_frames_head_ptr, 0, inframe->src_id);
 
         free(inframe);
         free(ll_inmsg_node);

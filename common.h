@@ -83,6 +83,8 @@ struct Sender_t {
 
     uint8_t seq_no; // sequence number
     Frame* lfs; //last frame sent;
+    struct timeval time_sent; // time last frame was sent
+    struct timeval timeout;   // timeout (expiring)
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
