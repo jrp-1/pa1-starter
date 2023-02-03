@@ -75,23 +75,23 @@ void handle_incoming_frames(Receiver* receiver,
                     // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
                     memcpy(str_pos, receiver->frames[i]->data, FRAME_PAYLOAD_SIZE);
                     // printf("|||%s\n", str_pos);
-                    free(receiver->frames[i]);
+                    // free(receiver->frames[i]);
                     str_pos += FRAME_PAYLOAD_SIZE;
                 }
                 printf("<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
 
             }
 
-            free(inframe);
-            free(ll_inmsg_node);
+            // free(inframe);
+            // free(ll_inmsg_node);
         }
         else {
             // drop frame
             // printf("\nCRC MISMATCH: wait for resend\n");
             free(raw_char_buf);
-            free(ll_inmsg_node);
+            // free(ll_inmsg_node);
         }
-        
+        free(ll_inmsg_node);
     }
 }
 
