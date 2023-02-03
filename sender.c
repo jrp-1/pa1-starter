@@ -133,6 +133,10 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     // on us
     input_cmd_length = ll_get_length(sender->input_cmdlist_head);
     while (input_cmd_length > 0) {
+
+        // peek to check receiver and SYN
+        LLnode* ll_peeked_input = sender->input_cmdlist_head;
+        Cmd* peeked_command = (Cmd* )ll_peeked_input->value;
         // Pop a node off and update the input_cmd_length
         LLnode* ll_input_cmd_node = ll_pop_node(&sender->input_cmdlist_head);
         input_cmd_length = ll_get_length(sender->input_cmdlist_head);
