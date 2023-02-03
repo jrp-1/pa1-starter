@@ -35,7 +35,7 @@ void set_timeout(Sender* sender) {
         sender->timeout.tv_usec -= 1000000;
         // printf("TIMEOUT OVERFLOW\n");
     }
-    printf("SET TIMEOUT\n");
+    // printf("SET TIMEOUT\n");
 
 }
 
@@ -112,7 +112,7 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 // 0 if equal for both, if not both then need to resend to get ACK
                 // check for ACK
                 sender->last_ack_recv = inframe->seq_no;
-                printf("<ACK SND_%d>:[%s%d]\n", sender->send_id, inframe->data, inframe->seq_no);
+                // printf("<ACK SND_%d>:[%s%d]\n", sender->send_id, inframe->data, inframe->seq_no);
                 sender->awaiting_msg_ack = 0;
             } else {
                 // printf("\nACK CRC MISMATCH\n");

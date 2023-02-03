@@ -87,7 +87,7 @@ void handle_incoming_frames(Receiver* receiver,
         }
         else {
             // drop frame
-            printf("\nCRC MISMATCH: wait for resend\n");
+            // printf("\nCRC MISMATCH: wait for resend\n");
             free(raw_char_buf);
             free(ll_inmsg_node);
         }
