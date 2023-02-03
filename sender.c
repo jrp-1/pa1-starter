@@ -11,12 +11,36 @@ void init_sender(Sender* sender, int id) {
     sender->active = 1;
     sender->awaiting_msg_ack = 0;
     // TODO: You should fill in this function as necessary
+    sender->lfs = malloc(sizeof(Frame)); //last frame sent
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
     // TODO: You should fill in this function so that it returns the 
     // timeval when next timeout should occur
     return NULL;
+}
+
+void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst) {
+    // builds a frame
+    assert(outgoing_frame);
+    memcpy(outgoing_frame->data, message, FRAME_PAYLOAD_SIZE);
+    outgoing_frame->src_id = src;
+    outgoing_frame->dst_id = dst;
+    // At this point, we don't need the outgoing_cmd
+    free(message);
+}
+
+void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame) {
+    // set last frame sent
+    sender->lfs->src_id = outgoing_frame->src_id;
+    sender->lfs->dst_id = outgoing_frame->dst_id;
+    memcpy(sender->lfs->data, outgoing_frame->data, FRAME_PAYLOAD_SIZE);
+
+    // adds frame to queue
+
+    char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+    ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+    free(outgoing_frame);
 }
 
 void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -51,23 +75,28 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
         if (msg_length > FRAME_PAYLOAD_SIZE) {
             // Do something about messages that exceed the frame size
             printf(
+                // split message intoframes
                 "<SEND_%d>: sending messages of length greater than %d is not "
                 "implemented\n",
                 sender->send_id, MAX_FRAME_SIZE);
         } else {
             Frame* outgoing_frame = malloc(sizeof(Frame));
-            assert(outgoing_frame);
-            strcpy(outgoing_frame->data, outgoing_cmd->message);
-            outgoing_frame->src_id = outgoing_cmd->src_id;
-            outgoing_frame->dst_id = outgoing_cmd->dst_id;
-            // At this point, we don't need the outgoing_cmd
-            free(outgoing_cmd->message);
+
+            build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, outgoing_cmd->message, outgoing_cmd->src_id, outgoing_cmd->dst_id);
+            // Frame* outgoing_frame = malloc(sizeof(Frame));
+            // assert(outgoing_frame);
+            // strcpy(outgoing_frame->data, outgoing_cmd->message);
+            // outgoing_frame->src_id = outgoing_cmd->src_id;
+            // outgoing_frame->dst_id = outgoing_cmd->dst_id;
+            // // At this point, we don't need the outgoing_cmd
+            // free(outgoing_cmd->message);
             free(outgoing_cmd);
 
+            add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
             // Convert the message to the outgoing_charbuf
-            char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
-            ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
-            free(outgoing_frame);
+            // char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+            // ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+            // free(outgoing_frame);
         }
     }
 }

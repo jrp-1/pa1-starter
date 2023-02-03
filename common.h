@@ -61,6 +61,8 @@ struct Receiver_t {
 
     int recv_id;
     int active;
+
+    uint8_t seq_no; // sequence number
 };
 
 struct Sender_t {
@@ -78,6 +80,9 @@ struct Sender_t {
     int send_id;
     int active;
     int awaiting_msg_ack;
+
+    uint8_t seq_no; // sequence number
+    Frame* lfs; //last frame sent;
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
@@ -95,12 +100,14 @@ typedef struct Receiver_t Receiver;
    In the rest portions of the frame, you can add fields and change FRAME_PAYLOAD_SIZE as
    you want. However, MAX_FRAME_SIZE is fixed (i.e. 64 bytes).
 */
-#define FRAME_PAYLOAD_SIZE 60
+#define FRAME_PAYLOAD_SIZE 58
 struct Frame_t {
     uint16_t remaining_msg_bytes; // DO NOT CHANGE
     uint8_t dst_id; // DO NOT CHANGE
     uint8_t src_id; // DO NOT CHANGE
+    uint8_t seq_no; // sequence number
     char data[FRAME_PAYLOAD_SIZE];
+    uint8_t crc8; // added crc
 };
 
 /*
