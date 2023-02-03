@@ -61,6 +61,8 @@ void handle_incoming_frames(Receiver* receiver,
             copy_frame(receiver->frames[receiver->seq_no], inframe);
 
             fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+            printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+
 
 
             fprintf(stderr, "ACKING recv_%d, send_%d\n, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, inframe->remaining_msg_bytes);
