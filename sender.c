@@ -58,7 +58,7 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
     // Add CRC
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     outgoing_frame->crc8 = compute_crc8(outgoing_charbuf);
-    outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+    free(outgoing_charbuf);
     // At this point, we don't need the outgoing_cmd
     free(message);
 }
@@ -141,11 +141,33 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             // Do something about messages that exceed the frame size
 
             // TODO: data structure to store messages, sequence number, bytes remaining (then add 1 by 1) -- check if awaiting ack before sending next
-            printf(
-                // split message intoframes
+            if (msg_length > (FRAME_PAYLOAD_SIZE * UINT8_MAX)) {
+                printf(
                 "<SEND_%d>: sending messages of length greater than %d is not "
                 "implemented\n",
-                sender->send_id, MAX_FRAME_SIZE);
+                sender->send_id, MAX_FRAME_SIZE * UINT8_MAX);
+            }
+            sender->frame_ctr = (msg_length / FRAME_PAYLOAD_SIZE);
+            uint16_t remaining_bytes = msg_length - FRAME_PAYLOAD_SIZE;
+            // number of messages
+            printf("Sending%dmessages\n", sender->frame_ctr);
+            *(sender->frames) = malloc(sender->frame_ctr);
+            char* str_pos = outgoing_cmd->message; // pointer to where we are
+            for (int i = 0; i < sender->frame_ctr; i++) {
+                sender->frames[i] = malloc(sizeof(Frame));
+                char* char_buf = malloc(sizeof(FRAME_PAYLOAD_SIZE)); // buffer for each payload
+                memcpy(char_buf, str_pos, FRAME_PAYLOAD_SIZE);
+                // increment our position pointer
+                str_pos += FRAME_PAYLOAD_SIZE;
+                build_frame(sender, outgoing_frames_head_ptr, sender->frames[i], char_buf, outgoing_cmd->src_id, outgoing_cmd->dst_id, i, remaining_bytes);
+                if (remaining_bytes - FRAME_PAYLOAD_SIZE < 0) {
+                    remaining_bytes = 0;
+                } else {
+                    remaining_bytes -= FRAME_PAYLOAD_SIZE;
+                }
+                printf("remaining_bytes:%d\n,seq_no:%d\n", remaining_bytes, i);
+            }
+
         } else {
             Frame* outgoing_frame = malloc(sizeof(Frame));
 
