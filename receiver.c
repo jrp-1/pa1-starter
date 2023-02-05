@@ -57,15 +57,15 @@ void handle_incoming_frames(Receiver* receiver,
             // Free raw_char_buf
             free(raw_char_buf);
 
-            receiver->frames[receiver->seq_no] = malloc(sizeof(Frame));
-            copy_frame(receiver->frames[receiver->seq_no], inframe);
+            receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
+            copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
 
-            fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+            // fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
             // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
 
 
-            fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
+            // fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
             // send ack
             send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
 
@@ -73,18 +73,21 @@ void handle_incoming_frames(Receiver* receiver,
             if (inframe->remaining_msg_bytes == 0) {
                 char char_buf[FRAME_PAYLOAD_SIZE * UINT8_MAX]; // huge string
 
-                fprintf(stderr, "HI\n\n");
                 char* str_pos = char_buf;
                 for (int i = 0; i <= receiver->last_frame_recv; i++) {
                     // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
-                    memcpy(str_pos, receiver->frames[i]->data, FRAME_PAYLOAD_SIZE);
+                    memcpy(str_pos, receiver->frames[inframe->src_id][i]->data, FRAME_PAYLOAD_SIZE);
 
-                    fprintf(stderr, "copied string%d\n", i);
+                    // fprintf(stderr, "copied string%d\n", i);
                     // printf("|||%s\n", str_pos);
-                    // free(receiver->frames[i]);
+                    free(receiver->frames[inframe->src_id][i]);
                     str_pos += FRAME_PAYLOAD_SIZE;
                 }
+
                 printf("<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
+
+                // set inactive?
+                // printf("LENGTH OF RECEIVER:%d\n", ll_get_length(*outgoing_frames_head_ptr));
 
             }
 
@@ -93,7 +96,7 @@ void handle_incoming_frames(Receiver* receiver,
         }
         else {
             // drop frame
-            fprintf(stderr, "\nCRC MISMATCH: wait for resend\n");
+            // fprintf(stderr, "\nCRC MISMATCH: wait for resend\n");
             free(raw_char_buf);
             // free(ll_inmsg_node);
         }

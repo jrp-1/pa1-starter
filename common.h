@@ -19,6 +19,10 @@
 // Window Sizes
 #define SWS 8
 #define RWS 8
+#define WINDOW_SIZE 8
+// max hosts
+#define MAX_HOSTS 256
+
 typedef unsigned char uchar_t;
 typedef struct Frame_t Frame;
 
@@ -72,11 +76,11 @@ struct Receiver_t {
 
     uint8_t last_frame_recv;
     uint8_t seq_no; // sequence number
-    Frame* frames[UINT8_MAX]; // array of frames
+    Frame* frames[MAX_HOSTS][UINT8_MAX]; // array of frames per sender
     struct RecvQ_slot {
         Frame* frame;
-    } RecvQ[RWS];
-    RecvQ* recvQ[][RWS];
+    } RecvQ[WINDOW_SIZE];
+    RecvQ* recvQ[MAX_HOSTS][WINDOW_SIZE];
 };
 
 struct Sender_t {
@@ -95,10 +99,12 @@ struct Sender_t {
     int active;
     int awaiting_msg_ack;
 
+    // track per receiver
     uint8_t frame_ctr; // how many frames in msg
     uint8_t seq_no; // sequence number
     uint8_t next_frame;
     uint8_t last_ack_recv;
+    int msg_sent;
     Frame* lfs; //last frame sent;
     struct timeval time_sent; // time last frame was sent
     struct timeval timeout;   // timeout (expiring)
@@ -107,8 +113,8 @@ struct Sender_t {
     struct SendQ_slot {
         struct timeval timeout;
         Frame* frame;
-    } SendQ[SWS];
-    SendQ sendq[SWS];
+    } SendQ[WINDOW_SIZE];
+    SendQ sendq[WINDOW_SIZE];
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
