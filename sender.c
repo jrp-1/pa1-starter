@@ -144,12 +144,16 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                     free(sender->SendQ[sender->last_ack_recv % WINDOW_SIZE].frame); // free the acked payload
                     if (sender->last_ack_recv == sender->window_end) {  // we need to move the window
                         sender->window_end = sender->window_end + WINDOW_SIZE - 1;
+                        if (sender->window_end > sender->message_end) {
+                            sender->window_end = sender->message_end;
+                        }
                         sender->window_start = sender->last_ack_recv;
                         sender->awaiting_msg_ack = 0;
                     }
                  }
             }
             else {
+                // drop ACK frame
                 //fprintf(stderr, "\nACK CRC MISMATCH\n");
             }
 
@@ -189,6 +193,10 @@ void send_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
             // sleep for .01s
             nanosleep(&ts, NULL); // part of #include <“time.h”>
+        }
+        if (sender->seq_no == sender->message_end) {
+            // last frame sent
+            sender->msg_sent = 1;
         }
         sender->awaiting_msg_ack = 1; // wait for ack of 8 frames
 
