@@ -74,6 +74,9 @@ struct Receiver_t {
     int recv_id;
     int active;
 
+    //  check handshake status
+    int handshake[MAX_HOSTS];
+
     uint8_t last_frame_recv;
     uint8_t seq_no; // sequence number
     Frame* frames[MAX_HOSTS][MAX_HOSTS]; // array of frames per sender
@@ -100,23 +103,27 @@ struct Sender_t {
     int awaiting_msg_ack;
 
     // track per receiver
-    uint8_t frame_ctr; // how many frames in msg
-    uint8_t seq_no; // sequence number
+    uint8_t frame_ctr;      // how many frames in msg
+    uint8_t seq_no;         // sequence number
+    uint8_t window_start;   // first frame in window
+    uint8_t window_end;     // last frame in window
     uint8_t next_frame;
     uint8_t last_ack_recv;
+    uint8_t lfs;
     int msg_sent;
-    Frame* lfs; //last frame sent;
     struct timeval time_sent; // time last frame was sent
     struct timeval timeout;   // timeout (expiring)
     Frame* frames[MAX_HOSTS]; // array of frames
 
     //  check handshake status
+    int awaiting_handshake;
     int handshake[MAX_HOSTS];
 
     struct SendQ_slot {
         struct timeval timeout;
         Frame* frame;
     } SendQ[WINDOW_SIZE];
+
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;

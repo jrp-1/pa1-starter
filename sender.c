@@ -11,15 +11,16 @@ void init_sender(Sender* sender, int id) {
     sender->active = 1;
     sender->awaiting_msg_ack = 0;
 
+    sender->awaiting_handshake = 0;
     for (int i = 0; i < MAX_HOSTS; i++) {
         sender->handshake[i] = 0; // no handshake
     }
 
     // TODO: You should fill in this function as necessary
-    sender->lfs = malloc(sizeof(Frame)); //last frame sent
+    sender->lfs = 0; //last frame sent
     gettimeofday(&sender->time_sent, NULL);
     sender->frame_ctr = 0;
-    sender->seq_no = 0;
+    sender->seq_no = 255;
     sender->next_frame = 0;
     sender->msg_sent = 1; // initialize to 1
 }
@@ -34,12 +35,14 @@ struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
 
 void set_timeout(Sender* sender) {
     // add .09s to time_sent
-    sender->timeout.tv_sec = sender->time_sent.tv_sec;
-    sender->timeout.tv_usec = sender->time_sent.tv_usec + 90000;
-    if (sender->timeout.tv_usec > 1000000) { // check for overlow
-        sender->timeout.tv_sec++;
-        sender->timeout.tv_usec -= 1000000;
-        //fprintf(stderr, "TIMEOUT OVERFLOW\n");
+    if (sender->awaiting_handshake) {
+        sender->timeout.tv_sec = sender->time_sent.tv_sec;
+        sender->timeout.tv_usec = sender->time_sent.tv_usec + 90000;
+        if (sender->timeout.tv_usec > 1000000) { // check for overlow
+            sender->timeout.tv_sec++;
+            sender->timeout.tv_usec -= 1000000;
+            //fprintf(stderr, "TIMEOUT OVERFLOW\n");
+        }
     }
     //fprintf(stderr, "SET TIMEOUT\n");
 
@@ -48,7 +51,7 @@ void set_timeout(Sender* sender) {
 void rebuild_frame(Sender* sender, Frame* outgoing_frame) {
     //rebuild for last frame sent
     assert(outgoing_frame);
-    copy_frame(outgoing_frame, sender->lfs);
+    // copy_frame(outgoing_frame, sender->lfs);
 }
 
 void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame, char* message, uint8_t src, uint8_t dst, uint8_t sequence_no, uint16_t remaining_bytes) {
@@ -75,8 +78,12 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
 }
 
 void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame) {
+    // USE ONLY FOR SYN-ACK
+
+
     // set last frame sent
-    copy_frame(sender->lfs, outgoing_frame);
+    sender->lfs = outgoing_frame->seq_no;
+    // copy_frame(sender->lfs, outgoing_frame);
 
     // set time frame sent
     gettimeofday(&sender->time_sent, NULL);
@@ -87,18 +94,21 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoin
     // TODO: crc, ack
     // set we are waiting for ack
     sender->awaiting_msg_ack = 1;
-    sender->seq_no = outgoing_frame->seq_no;
 
     //fprintf(stderr, "Sending: SND_%d,RCV%d,MSG:%s,seq_no:%d\n",outgoing_frame->src_id,outgoing_frame->dst_id,outgoing_frame->data,outgoing_frame->seq_no);
-
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
     free(outgoing_frame);
 }
 
+void resend_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
+
+}
+
 void send_syn(Sender* sender, LLnode** outgoing_frames_head_ptr, uint8_t dst) {
     Frame* outgoing_frame = malloc(sizeof(Frame));
     build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, "SYN", sender->send_id, dst, 0, 0);
+    sender->awaiting_handshake = 1;
     add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
 }
 
@@ -125,6 +135,8 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 if(!(strcmp(inframe->data, "SYN-ACK"))) {
                     // we're acked
                     fprintf(stderr, "SYN-ACK from sender host %d\tto receiver host %d\n", inframe->dst_id, inframe->src_id);
+                    sender->awaiting_handshake = 0;
+                    sender->awaiting_msg_ack = 0;
                     sender->handshake[inframe->src_id] = 1;
                 }
 
@@ -191,61 +203,58 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             free(ll_input_cmd_node);
 
             int msg_length = strlen(outgoing_cmd->message) + 1;
-            // if (msg_length > FRAME_PAYLOAD_SIZE) {
-                // Do something about messages that exceed the frame size
 
-                // print_cmd(outgoing_cmd);
 
-                // TODO: data structure to store messages, sequence number, bytes remaining (then add 1 by 1) -- check if awaiting ack before sending next
-                if (msg_length > (FRAME_PAYLOAD_SIZE * UINT8_MAX)) {
-                    printf(
-                    "<SEND_%d>: sending messages of length greater than %d is not "
-                    "implemented\n",
-                    sender->send_id, MAX_FRAME_SIZE * UINT8_MAX);
+            if (msg_length > (FRAME_PAYLOAD_SIZE * UINT8_MAX)) {
+                printf(
+                "<SEND_%d>: sending messages of length greater than %d is not "
+                "implemented\n",
+                sender->send_id, MAX_FRAME_SIZE * UINT8_MAX);
+            }
+
+            // number of new frames
+            uint8_t new_frames = (msg_length / FRAME_PAYLOAD_SIZE) + 1;
+            fprintf(stderr, "FRAME CTR:%d\n", new_frames);
+
+
+            uint16_t remaining_bytes = msg_length - FRAME_PAYLOAD_SIZE;
+
+            if (msg_length - FRAME_PAYLOAD_SIZE < 0) {
+                remaining_bytes = 0; // when payloads only need 1 frame
+            }
+            // printf("Sending%dmessages\n", sender->frame_ctr);
+
+            char* str_pos = outgoing_cmd->message; // pointer to where we are
+
+            while (new_frames > 0) {
+
+                sender->frames[sender->seq_no] = malloc(sizeof(Frame));
+                char char_buf[FRAME_PAYLOAD_SIZE]; // buffer for each payload
+                
+                memcpy(char_buf, str_pos, FRAME_PAYLOAD_SIZE);
+
+                // increment our position pointer
+                str_pos += FRAME_PAYLOAD_SIZE;
+
+                assert(sender->frames[sender->seq_no]);
+                //fprintf(stderr, "remaining_bytes:%d  || %d\n", msg_length, remaining_bytes);
+                
+                build_frame(sender, outgoing_frames_head_ptr, sender->frames[sender->seq_no], char_buf, outgoing_cmd->src_id, outgoing_cmd->dst_id, sender->seq_no, remaining_bytes);
+                // printf("remaining_bytes:%d,seq_no:%d\n", remaining_bytes, i);
+                
+                if (remaining_bytes - FRAME_PAYLOAD_SIZE < 0) {
+                    remaining_bytes = 0;
+                } else {
+                    remaining_bytes -= FRAME_PAYLOAD_SIZE;
                 }
+                fprintf(stderr, "SEQ_NO:%u\t", sender->seq_no);
+                sender->seq_no = sender->seq_no + 1;  // overflow should set 255 to 0
 
-                // reset for new message
-                sender->next_frame = 0;
+                new_frames --;
+                
+            }
 
-
-                sender->frame_ctr = (msg_length / FRAME_PAYLOAD_SIZE) + 1;
-                //fprintf(stderr, "FRAME CTR:%d\n", sender->frame_ctr);
-                uint16_t remaining_bytes = msg_length - FRAME_PAYLOAD_SIZE;
-
-                if (msg_length - FRAME_PAYLOAD_SIZE < 0) {
-                    remaining_bytes = 0; // when payloads only need 1 frame
-                }
-                // number of messages
-                // printf("Sending%dmessages\n", sender->frame_ctr);
-                // *(sender->frames) = malloc(sizeof(Frame) * sender->frame_ctr);
-                char* str_pos = outgoing_cmd->message; // pointer to where we are
-                for (uint8_t i = 0; i < sender->frame_ctr; i++) {
-                    sender->frames[i] = malloc(sizeof(Frame));
-                    char char_buf[FRAME_PAYLOAD_SIZE]; // buffer for each payload
-                    
-                    memcpy(char_buf, str_pos, FRAME_PAYLOAD_SIZE);
-
-                    // increment our position pointer
-                    str_pos += FRAME_PAYLOAD_SIZE;
-                    assert(sender->frames[i]);
-                    //fprintf(stderr, "remaining_bytes:%d  || %d\n", msg_length, remaining_bytes);
-
-                    if (sender->seq_no > 255) { // sequence number overflow TODO: PROPER IMPLEMENTATION
-                        sender->seq_no = 0;
-                    }
-                    
-                    build_frame(sender, outgoing_frames_head_ptr, sender->frames[i], char_buf, outgoing_cmd->src_id, outgoing_cmd->dst_id, i, remaining_bytes);
-                    // printf("remaining_bytes:%d,seq_no:%d\n", remaining_bytes, i);
-                    
-                    if (remaining_bytes - FRAME_PAYLOAD_SIZE < 0) {
-                        remaining_bytes = 0;
-                    } else {
-                        remaining_bytes -= FRAME_PAYLOAD_SIZE;
-                    }
-                    
-                }
-
-                sender->msg_sent = 0; // we've made a set of frames
+            sender->msg_sent = 0; // we've made a set of frames
 
             // } else {
             //     Frame* outgoing_frame = malloc(sizeof(Frame));

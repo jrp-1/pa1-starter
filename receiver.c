@@ -6,6 +6,10 @@ void init_receiver(Receiver* receiver, int id) {
     receiver->recv_id = id;
     receiver->input_framelist_head = NULL;
     receiver->active = 1;
+
+    for (int i = 0; i < MAX_HOSTS; i++) {
+        receiver->handshake[i] = 0;
+    }
 }
 
 void send_ack(Receiver* receiver, LLnode** outgoing_frames_head_ptr, uint8_t sequence_no, uint8_t send_id) {
@@ -37,7 +41,7 @@ void send_synack(Receiver* receiver, LLnode** outgoing_frames_head_ptr, uint8_t 
     outgoing_frame->crc8 = compute_crc8(outgoing_charbuf);
     outgoing_charbuf = convert_frame_to_char(outgoing_frame);
 
-    fprintf(stderr, "Sending SYN-ACK to%d \n", outgoing_frame->dst_id);
+    // fprintf(stderr, "Sending SYN-ACK to%d \n", outgoing_frame->dst_id);
 
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
     free(outgoing_frame);
@@ -72,54 +76,56 @@ void handle_incoming_frames(Receiver* receiver,
                 // establish handshake
                 send_synack(receiver, outgoing_frames_head_ptr, inframe->seq_no, inframe->src_id);
                 // make receive Q
-
-
+                receiver->handshake[inframe->src_id] = 1;
 
                 free(raw_char_buf);
             }
+            // else if (receiver->handshake[inframe->src_id] == 0) {
+            //     // error : NO HANDSHAKE
+            //     fprintf(stderr, "NO HANDSHAKE FROM %d to receiver %d\n", inframe->src_id, receiver->recv_id);
+            // }
             else {
 
-                receiver->seq_no = inframe->seq_no;
-                receiver->last_frame_recv = inframe->seq_no;
+                // receiver->seq_no = inframe->seq_no;
+                // receiver->last_frame_recv = inframe->seq_no;
 
-                // Free raw_char_buf
-                free(raw_char_buf);
+                // // Free raw_char_buf
+                // free(raw_char_buf);
 
+                
+                // receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
+                // copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
 
-                // on syn-ack
-                receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
-                copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
-
-                // fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
-                // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
-
+                // // fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+                // // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
 
-                // fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
-                // send ack
-                send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
 
-                // check if last frame, if so print
-                if (inframe->remaining_msg_bytes == 0) {
-                    char char_buf[FRAME_PAYLOAD_SIZE * UINT8_MAX]; // huge string
+                // // fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
+                // // send ack
+                // send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
 
-                    char* str_pos = char_buf;
-                    for (int i = 0; i <= receiver->last_frame_recv; i++) {
-                        // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
-                        memcpy(str_pos, receiver->frames[inframe->src_id][i]->data, FRAME_PAYLOAD_SIZE);
+                // // check if last frame, if so print
+                // if (inframe->remaining_msg_bytes == 0) {
+                //     char char_buf[FRAME_PAYLOAD_SIZE * UINT8_MAX]; // huge string
 
-                        // fprintf(stderr, "copied string%d\n", i);
-                        // printf("|||%s\n", str_pos);
-                        // free(receiver->frames[inframe->src_id][i]);
-                        str_pos += FRAME_PAYLOAD_SIZE;
-                    }
+                //     char* str_pos = char_buf;
+                //     for (int i = 0; i <= receiver->last_frame_recv; i++) {
+                //         // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
+                //         memcpy(str_pos, receiver->frames[inframe->src_id][i]->data, FRAME_PAYLOAD_SIZE);
 
-                    printf("<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
+                //         // fprintf(stderr, "copied string%d\n", i);
+                //         // printf("|||%s\n", str_pos);
+                //         // free(receiver->frames[inframe->src_id][i]);
+                //         str_pos += FRAME_PAYLOAD_SIZE;
+                //     }
 
-                    // set inactive?
-                    // printf("LENGTH OF RECEIVER:%d\n", ll_get_length(*outgoing_frames_head_ptr));
+                //     printf("<RECV_%d>:[%s]\n", receiver->recv_id, char_buf);
 
-                }
+                //     // set inactive?
+                //     // printf("LENGTH OF RECEIVER:%d\n", ll_get_length(*outgoing_frames_head_ptr));
+
+                // }
 
                 // free(inframe);
                 // free(ll_inmsg_node);
