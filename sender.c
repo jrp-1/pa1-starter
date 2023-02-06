@@ -94,7 +94,7 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoin
     //fprintf(stderr, "Sending: SND_%d,RCV%d,MSG:%s,seq_no:%d\n",outgoing_frame->src_id,outgoing_frame->dst_id,outgoing_frame->data,outgoing_frame->seq_no);
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
-    free(outgoing_frame);
+    // free(outgoing_frame);
 }
 
 void resend_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -113,6 +113,7 @@ void resend_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
 void send_syn(Sender* sender, LLnode** outgoing_frames_head_ptr, uint8_t dst) {
     Frame* outgoing_frame = malloc(sizeof(Frame));
+    sender->frames[0] = outgoing_frame;             // don't lose the frame if need to resend
     build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, "SYN", sender->send_id, dst, 0, 0);
     sender->awaiting_handshake = 1;
     add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
@@ -146,10 +147,13 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                     sender->awaiting_handshake = 0;
                     sender->awaiting_msg_ack = 0;
                     sender->handshake[inframe->src_id] = 1;
+
+                    // free our outgoing frame
+                    free(sender->frames[sender->lfs]);
                 }
 
-                if(!(strcmp(inframe->data, "ACK") && compute_crc8(raw_char_buf))) { 
-                    // check for ACK and for crc
+                if(!(strcmp(inframe->data, "ACK"))) { 
+                    // check for ACK
                     sender->last_ack_recv = inframe->seq_no;            // should handle cumulative ack
 
                     fprintf(stderr, "WEHAVEACK\t\t%dlastack\t\tseq_no %d\t\tmessageend: %d\t\twindowend:%d\n", sender->last_ack_recv, inframe->seq_no, sender->message_end, sender->window_end);
@@ -175,7 +179,7 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             }
             else {
                 // drop ACK frame for CRC mismatch -- times out the frame
-                //fprintf(stderr, "\nACK CRC MISMATCH\n");
+                fprintf(stderr, "\nACK CRC MISMATCH\n");
             }
 
             // Free raw_char_buf
@@ -273,7 +277,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
             // number of new frames
             uint8_t new_frames = (msg_length / FRAME_PAYLOAD_SIZE) + 1;
-            fprintf(stderr, "FRAME CTR:%d\n", new_frames);
+            // fprintf(stderr, "NEW FRAMES:%d\t\n", new_frames);
 
             sender->window_start = sender->seq_no;
             if (new_frames < SWS) {
@@ -283,6 +287,8 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             else {
                 sender->window_end = sender->seq_no + SWS - 1;
             }
+
+            // fprintf(stderr, "NEW FRAMES:%d\tWINDOW END:%d\tSEQ NO:%d\n", new_frames, sender->window_end, sender->seq_no);
 
             uint16_t remaining_bytes = msg_length - FRAME_PAYLOAD_SIZE;
 
@@ -323,7 +329,13 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             free(outgoing_cmd->message);
 
             sender->message_end = sender->seq_no;   // last frame in message;
+
+            fprintf(stderr, "NEW FRAMES:%d\tWINDOW END:%d\tSEQ NO:%d\tMESSAGE END:%d\n", new_frames, sender->window_end, sender->seq_no, sender->message_end);
+
+
             sender->seq_no = sender->window_start;  // set next frame in sequence to window start
+
+            fprintf(stderr, "SEQ_NO RESET:%d\n", sender->seq_no);
         }
     }
     send_frames(sender, outgoing_frames_head_ptr); // send out frames we just built
@@ -341,6 +353,10 @@ void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             Frame* outgoing_frame = sender->frames[sender->lfs];
             add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
         }
+    }
+    timer = timeval_usecdiff(&curr_time, sender_get_next_expiring_timeval(sender));
+    if (sender-> awaiting_msg_ack && timer < 0) {
+        resend_frames(sender, outgoing_frames_head_ptr);
     }
 }
 

@@ -111,6 +111,10 @@ void handle_incoming_frames(Receiver* receiver,
                 else {
                     // frame in order, update largest acc frame?
                     receiver->last_frame_recv = inframe->seq_no;
+                    receiver->largest_acc_frame = (receiver->largest_acc_frame + receiver->last_frame_recv);
+
+                    fprintf(stderr, "Largest acc frame set to %d\n", receiver->largest_acc_frame);
+
                 }
 
                 // Free raw_char_buf
@@ -131,8 +135,6 @@ void handle_incoming_frames(Receiver* receiver,
 
                 // when we get to the end of the window we need to move the window forwards and clear the queue
                 // we also need to stop moving the window when we receive EOF/last message
-
-                // receiver->largest_acc_frame = receiver->largest_acc_frame + (receiver->largest_acc_frame - receiver->last_frame_recv);
 
                 // // fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
                 // // send ack
@@ -163,6 +165,7 @@ void handle_incoming_frames(Receiver* receiver,
                 // free(inframe);
                 // free(ll_inmsg_node);
             } else {
+                fprintf(stderr, "Dropped frame seq_no: %d (not in range?) -- %d largest_acc_frame\n", inframe->seq_no, receiver->largest_acc_frame);
                 // drop frame -- seq_no not within acceptable range
             }
         }
