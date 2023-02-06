@@ -17,9 +17,10 @@
 #define MAX_COMMAND_LENGTH 16
 #define AUTOMATED_FILENAME 512
 // Window Sizes
-#define SWS 8
-#define RWS 8
 #define WINDOW_SIZE 8
+#define SWS WINDOW_SIZE
+#define RWS WINDOW_SIZE
+
 // max hosts
 #define MAX_HOSTS 256
 
@@ -77,13 +78,14 @@ struct Receiver_t {
     //  check handshake status
     int handshake[MAX_HOSTS];
 
-    uint8_t last_frame_recv;
-    uint8_t seq_no; // sequence number
+    uint8_t last_frame_recv;            // last successful frame received
+    uint8_t seq_no;                     // sequence number
+    uint8_t largest_acc_frame;          // largest acceptable frame
     Frame* frames[MAX_HOSTS][MAX_HOSTS]; // array of frames per sender
     struct RecvQ_slot {
         Frame* frame;
-    } RecvQ[WINDOW_SIZE];
-    RecvQ* recvQ[MAX_HOSTS][WINDOW_SIZE];
+    } RecvQ[RWS];
+    RecvQ recvQ[MAX_HOSTS][RWS];
 };
 
 struct Sender_t {
@@ -121,7 +123,7 @@ struct Sender_t {
     struct SendQ_slot {
         struct timeval timeout;
         Frame* frame;
-    } SendQ[WINDOW_SIZE];
+    } SendQ[SWS];
 
 };
 

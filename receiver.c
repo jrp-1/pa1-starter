@@ -7,6 +7,10 @@ void init_receiver(Receiver* receiver, int id) {
     receiver->input_framelist_head = NULL;
     receiver->active = 1;
 
+    receiver->last_frame_recv = 0;
+    receiver->seq_no = 0;
+    receiver->largest_acc_frame = WINDOW_SIZE - 1;
+
     for (int i = 0; i < MAX_HOSTS; i++) {
         receiver->handshake[i] = 0;
     }
@@ -80,26 +84,55 @@ void handle_incoming_frames(Receiver* receiver,
 
                 free(raw_char_buf);
             }
-            // else if (receiver->handshake[inframe->src_id] == 0) {
-            //     // error : NO HANDSHAKE
-            //     fprintf(stderr, "NO HANDSHAKE FROM %d to receiver %d\n", inframe->src_id, receiver->recv_id);
-            // }
-            else {
+            else if (receiver->handshake[inframe->src_id] == 0) {
+                // error : NO HANDSHAKE
+                fprintf(stderr, "NO HANDSHAKE FROM %d to receiver %d\n", inframe->src_id, receiver->recv_id);
+            }
+            else if (inframe->seq_no <= receiver->largest_acc_frame || ((uint8_t)(inframe->seq_no + 8) <= (uint8_t)(receiver->largest_acc_frame + 8))) {
+                // TODO: edge case largest_acc_frame becomes 0 and seq_no is 255, etc. -- add 8 to each to check so they rotate around
 
-                // receiver->seq_no = inframe->seq_no;
-                // receiver->last_frame_recv = inframe->seq_no;
+                receiver->seq_no = inframe->seq_no;
+                if (receiver->seq_no > receiver->last_frame_recv + 1) {
+                    // out of order frame sent -- 
+                }
+                else if (receiver->seq_no < receiver->last_frame_recv) {
+                    // out of order frame sent but valid frame as long as > laf - 8
+                    // check if we have frames in window
+                    uint8_t seq = receiver->seq_no;
+                    while (seq < receiver->largest_acc_frame) {
+                        // go through the window
+                        if (receiver->recvQ[inframe->src_id][seq % RWS].frame != NULL) {
+                            seq++;
+                        }
+                    }
+                    receiver->last_frame_recv = seq;
+                    // cumulative ACK to most recent frame
+                }
+                else {
+                    // frame in order, update largest acc frame?
+                    receiver->last_frame_recv = inframe->seq_no;
+                }
 
-                // // Free raw_char_buf
-                // free(raw_char_buf);
+                // Free raw_char_buf
+                free(raw_char_buf);
 
-                
-                // receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
-                // copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
+                receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
+                copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
+
+                // add to window
+                if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame == NULL) {
+                    receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = receiver->frames[inframe->src_id][receiver->seq_no];
+                }
 
                 fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
-                // // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
+                // only ack the last in-order frame received
+                send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
 
+                // when we get to the end of the window we need to move the window forwards and clear the queue
+                // we also need to stop moving the window when we receive EOF/last message
+
+                // receiver->largest_acc_frame = receiver->largest_acc_frame + (receiver->largest_acc_frame - receiver->last_frame_recv);
 
                 // // fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
                 // // send ack
@@ -129,6 +162,8 @@ void handle_incoming_frames(Receiver* receiver,
 
                 // free(inframe);
                 // free(ll_inmsg_node);
+            } else {
+                // drop frame -- seq_no not within acceptable range
             }
         }
         else {
