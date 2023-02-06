@@ -96,7 +96,7 @@ void handle_incoming_frames(Receiver* receiver,
                 // receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
                 // copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
 
-                // // fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+                fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
                 // // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
 

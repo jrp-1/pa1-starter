@@ -254,7 +254,13 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             fprintf(stderr, "FRAME CTR:%d\n", new_frames);
 
             sender->window_start = sender->seq_no;
-            sender->window_end = sender->seq_no + WINDOW_SIZE - 1;
+            if (new_frames < WINDOW_SIZE) {
+                // less frame than window size
+                sender->window_end = sender->seq_no + new_frames;
+            }
+            else {
+                sender->window_end = sender->seq_no + WINDOW_SIZE - 1;
+            }
 
             uint16_t remaining_bytes = msg_length - FRAME_PAYLOAD_SIZE;
 
@@ -298,6 +304,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             sender->seq_no = sender->window_start;  // set next frame in sequence to window start
         }
     }
+    send_frames(sender, outgoing_frames_head_ptr); // send out frames we just built
 }
 
 void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -307,7 +314,7 @@ void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     gettimeofday(&curr_time, NULL);
     long timer = timeval_usecdiff(&curr_time, &(sender->timeout));
     if (timer < 0) { // check  to see if timed out
-        if (sender->awaiting_msg_ack) { // make sure we're waiting for an ACK
+        if (sender->awaiting_msg_ack && sender->awaiting_handshake) { // make sure we're waiting for a SYNACK
             // make new frame from LFS
             // printf("timervalue:%d|||curr_time_usec:%d|||timeout_usec%d\n", timer, (curr_time.tv_sec * 1000000 + curr_time.tv_usec), (sender->timeout.tv_sec * 1000000 + sender->timeout.tv_usec));
             Frame* outgoing_frame = sender->frames[sender->lfs];
