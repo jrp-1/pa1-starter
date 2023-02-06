@@ -103,11 +103,10 @@ struct Sender_t {
     int awaiting_msg_ack;
 
     // track per receiver
-    uint8_t frame_ctr;      // how many frames in msg
     uint8_t seq_no;         // sequence number
     uint8_t window_start;   // first frame in window
     uint8_t window_end;     // last frame in window
-    uint8_t next_frame;
+    uint8_t message_end;    // last frame in message
     uint8_t last_ack_recv;
     uint8_t lfs;
     int msg_sent;
