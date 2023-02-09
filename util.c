@@ -135,3 +135,7 @@ uint8_t compute_crc8(char* char_buf){
     }
     return remainder;
 }
+
+void print_frame(Frame* frame) {
+    fprintf(stderr, "FRAME: seq_no: %d\t remaining_msg_bytes: %d\t src_id: %d\t dst_id %d\t payload:  %s  \tcrc:%d\n", frame->seq_no, frame->remaining_msg_bytes, frame->src_id, frame->dst_id, frame->data, frame->crc8);
+}

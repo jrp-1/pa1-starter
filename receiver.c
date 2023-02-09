@@ -14,6 +14,9 @@ void init_receiver(Receiver* receiver, int id) {
     for (int i = 0; i < MAX_HOSTS; i++) {
         receiver->handshake[i] = 0;
     }
+
+    receiver->end_of_last_pl = 0;
+    // receiver->message = malloc(FRAME_PAYLOAD_SIZE * UINT8_MAX); // huge string
 }
 
 void send_ack(Receiver* receiver, LLnode** outgoing_frames_head_ptr, uint8_t sequence_no, uint8_t send_id) {
@@ -45,7 +48,12 @@ void send_synack(Receiver* receiver, LLnode** outgoing_frames_head_ptr, uint8_t 
     outgoing_frame->crc8 = compute_crc8(outgoing_charbuf);
     outgoing_charbuf = convert_frame_to_char(outgoing_frame);
 
-    // fprintf(stderr, "Sending SYN-ACK to%d \n", outgoing_frame->dst_id);
+    if (receiver->message[send_id] == NULL) {
+        receiver->message[send_id] = malloc(sizeof(char)  * FRAME_PAYLOAD_SIZE * UINT8_MAX);
+    }
+   
+
+    fprintf(stderr, "Sending SYN-ACK to%d \n", outgoing_frame->dst_id);
 
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
     free(outgoing_frame);
@@ -62,6 +70,7 @@ void handle_incoming_frames(Receiver* receiver,
     //    6) Implement logic to combine payload received from all frames belonging to a message
     //       and print the final message when all frames belonging to a message have been received.
     //    7) ACK the received frame
+
     int incoming_frames_length = ll_get_length(receiver->input_framelist_head);
     while (incoming_frames_length > 0) {
         // Pop a node off the front of the link list and update the count
@@ -77,10 +86,15 @@ void handle_incoming_frames(Receiver* receiver,
             Frame* inframe = convert_char_to_frame(raw_char_buf);
 
             if (!(strcmp(inframe->data, "SYN"))) {
+                fprintf(stderr, "SYNPAYLOADREC\n");
+
                 // establish handshake
                 send_synack(receiver, outgoing_frames_head_ptr, inframe->seq_no, inframe->src_id);
                 // make receive Q
                 receiver->handshake[inframe->src_id] = 1;
+
+                // make a string on handshake
+                receiver->message[inframe->src_id] = malloc(FRAME_PAYLOAD_SIZE * UINT8_MAX);
 
                 free(raw_char_buf);
             }
@@ -90,6 +104,14 @@ void handle_incoming_frames(Receiver* receiver,
             }
             else if (inframe->seq_no <= receiver->largest_acc_frame || ((uint8_t)(inframe->seq_no + 8) <= (uint8_t)(receiver->largest_acc_frame + 8))) {
                 // TODO: edge case largest_acc_frame becomes 0 and seq_no is 255, etc. -- add 8 to each to check so they rotate around
+
+
+                
+                print_frame(inframe);
+                // TODO: CHECK message_bytes
+                if (inframe->remaining_msg_bytes > 0) {
+                    
+                }
 
                 receiver->seq_no = inframe->seq_no;
                 if (receiver->seq_no > receiver->last_frame_recv + 1) {
@@ -103,6 +125,8 @@ void handle_incoming_frames(Receiver* receiver,
                         // go through the window
                         if (receiver->recvQ[inframe->src_id][seq % RWS].frame != NULL) {
                             seq++;
+                            // update our message
+                            memcpy(&(*(receiver->message[inframe->src_id] + seq * FRAME_PAYLOAD_SIZE)), inframe->data, FRAME_PAYLOAD_SIZE);
                         }
                     }
                     receiver->last_frame_recv = seq;
@@ -111,7 +135,11 @@ void handle_incoming_frames(Receiver* receiver,
                 else {
                     // frame in order, update largest acc frame?
                     receiver->last_frame_recv = inframe->seq_no;
-                    receiver->largest_acc_frame = (receiver->largest_acc_frame + receiver->last_frame_recv);
+                    receiver->largest_acc_frame = receiver->last_frame_recv + RWS - 1;
+
+                    // update our message
+                    memcpy((receiver->message[inframe->src_id] + inframe->seq_no * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
+                    // memcpy(str_pos, receiver->frames[inframe->src_id][i]->data, FRAME_PAYLOAD_SIZE);
 
                     fprintf(stderr, "Largest acc frame set to %d\n", receiver->largest_acc_frame);
 
@@ -120,15 +148,31 @@ void handle_incoming_frames(Receiver* receiver,
                 // Free raw_char_buf
                 free(raw_char_buf);
 
-                receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
-                copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
-
                 // add to window
                 if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame == NULL) {
-                    receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = receiver->frames[inframe->src_id][receiver->seq_no];
+                    receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = malloc(sizeof(Frame));
+                    // receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = receiver->frames[inframe->src_id][receiver->seq_no];
                 }
+                copy_frame(receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame, inframe);
+
+
+                // receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
+                // copy_frame(receiver->frames[inframe->src_id][receiver->seq_no], inframe);
 
                 fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+
+
+                // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+
+                if (inframe->remaining_msg_bytes == 0) {
+                    fprintf(stderr, "LAST FRAME RECV?\n");
+                    // fprintf(stderr, "FIRST FRAME? %d\n", first_frame);
+                    // print our message
+                    printf("<RECV_%d>:[%s]\n", receiver->recv_id, (receiver->message[inframe->src_id] + receiver->end_of_last_pl * FRAME_PAYLOAD_SIZE));
+
+                    // set our last payload position
+                    receiver->end_of_last_pl = inframe->seq_no + 1;
+                }
 
                 // only ack the last in-order frame received
                 send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
@@ -136,18 +180,19 @@ void handle_incoming_frames(Receiver* receiver,
                 // when we get to the end of the window we need to move the window forwards and clear the queue
                 // we also need to stop moving the window when we receive EOF/last message
 
+
                 // // fprintf(stderr, "ACKING recv_%d, send_%d, seq_no%d, remaining bytes:%d\n", receiver->recv_id, inframe->src_id, receiver->seq_no, inframe->remaining_msg_bytes);
                 // // send ack
                 // send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
 
-                // // check if last frame, if so print
-                // if (inframe->remaining_msg_bytes == 0) {
-                //     char char_buf[FRAME_PAYLOAD_SIZE * UINT8_MAX]; // huge string
+                // check if last frame, if so print
+                // if (inframe->remaining_msg_bytes == 0) { // PRINT
+                //        char char_buf[FRAME_PAYLOAD_SIZE * UINT8_MAX]; // huge string
 
                 //     char* str_pos = char_buf;
-                //     for (int i = 0; i <= receiver->last_frame_recv; i++) {
-                //         // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
-                //         memcpy(str_pos, receiver->frames[inframe->src_id][i]->data, FRAME_PAYLOAD_SIZE);
+                //     // for (int i = first_frame; i <= receiver->last_frame_recv; i++) {
+                // //         // printf("<RECV_%d>:[%s]\t", receiver->recv_id, receiver->frames[i]->data);
+                //         // memcpy(str_pos, receiver->frames[inframe->src_id][i]->data, FRAME_PAYLOAD_SIZE);
 
                 //         // fprintf(stderr, "copied string%d\n", i);
                 //         // printf("|||%s\n", str_pos);

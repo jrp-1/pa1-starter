@@ -10,6 +10,7 @@ void init_sender(Sender* sender, int id) {
     sender->input_framelist_head = NULL;
     sender->active = 1;
     sender->awaiting_msg_ack = 0;
+    sender->awaiting_handshake = 0;
     sender->last_ack_recv = 0;
 
     sender->awaiting_handshake = 0;
@@ -22,6 +23,10 @@ void init_sender(Sender* sender, int id) {
     gettimeofday(&sender->time_sent, NULL);
     sender->seq_no = 0;
     sender->msg_sent = 1; // initialize to 1
+
+    // .01 s timer for nanosleep
+    sender->ts.tv_sec = 0;
+    sender->ts.tv_nsec = 10000000; // 10 milliseconds
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
@@ -32,7 +37,9 @@ struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
         // SYN-ACK only uses .09s
         return &sender->timeout;
     }
-    return &sender->SendQ[(sender->seq_no) % SWS].timeout;
+    if (sender->awaiting_msg_ack)
+        // fprintf(stderr, "Getting Q timeout expiring_timeval\n");
+    return &sender->SendQ[(sender->lfs) % SWS].timeout;
 }
 
 void set_timeout(Sender* sender) {
@@ -73,14 +80,10 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
     // free(message);
 }
 
-void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame) {
+void add_syn(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame) {
     // USE ONLY FOR SYN-ACK
-
-
     // set last frame sent
     sender->lfs = outgoing_frame->seq_no;
-    // copy_frame(sender->lfs, outgoing_frame);
-
     // set time frame sent
     gettimeofday(&sender->time_sent, NULL);
     // set timeout
@@ -91,24 +94,10 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoin
     // set we are waiting for ack
     sender->awaiting_msg_ack = 1;
 
-    //fprintf(stderr, "Sending: SND_%d,RCV%d,MSG:%s,seq_no:%d\n",outgoing_frame->src_id,outgoing_frame->dst_id,outgoing_frame->data,outgoing_frame->seq_no);
+    // fprintf(stderr, "Sending: SND_%d,RCV%d,MSG:%s,seq_no:%d\n",outgoing_frame->src_id,outgoing_frame->dst_id,outgoing_frame->data,outgoing_frame->seq_no);
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
     // free(outgoing_frame);
-}
-
-void resend_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
-    // last ack_received to seq_no
-    uint8_t seq = sender->last_ack_recv;
-    fprintf(stderr, "RESENDING: from ");
-    while (seq != sender->seq_no) {
-        char* outgoing_charbuf = convert_frame_to_char(sender->SendQ[seq % SWS].frame);
-        // SEND THE FRAME
-        ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
-        fprintf(stderr, "%d\t", seq);
-        seq++; // increment until we get to our position in window
-    }
-    fprintf(stderr, "done\n");
 }
 
 void send_syn(Sender* sender, LLnode** outgoing_frames_head_ptr, uint8_t dst) {
@@ -116,7 +105,7 @@ void send_syn(Sender* sender, LLnode** outgoing_frames_head_ptr, uint8_t dst) {
     sender->frames[0] = outgoing_frame;             // don't lose the frame if need to resend
     build_frame(sender, outgoing_frames_head_ptr, outgoing_frame, "SYN", sender->send_id, dst, 0, 0);
     sender->awaiting_handshake = 1;
-    add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
+    add_syn(sender, outgoing_frames_head_ptr, outgoing_frame);
 }
 
 void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -137,6 +126,7 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             Frame* inframe = convert_char_to_frame(raw_char_buf);
 
             fprintf(stderr, "AWAITING ACK\n");
+            // fprintf(stderr, "INCOMING ACK: %s\n", )
 
             if (!compute_crc8(raw_char_buf)) { // check crc
 
@@ -161,23 +151,39 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                     if (sender->last_ack_recv == sender->message_end - 1) {
 
                         fprintf(stderr, "PAYLOADGONE\n");
-                        // full payload sent
+                        // full payload sent & we have ack
                         sender->awaiting_msg_ack = 0;
                     }
 
-                    // free(sender->SendQ[sender->last_ack_recv % SWS].frame); // free the acked payload
-                    if (sender->last_ack_recv == sender->window_end - 1) {  // we need to move the window & free the send q
+                    sender->window_start = sender->last_ack_recv;
 
-                        sender->window_end = sender->window_end + SWS - 1;
-                        if (sender->window_end > sender->message_end) {
-                            sender->window_end = sender->message_end;
-                        }
+                    if (sender->window_end < sender->message_end - 1) {
+                        sender->window_end = (uint8_t)(sender->last_ack_recv + SWS - 1);
+                        // sender->window_start = sender->last_ack_recv;
+                        // moving window end to 
+                    }
+
+
+
+                    // free(sender->SendQ[sender->last_ack_recv % SWS].frame); // free the acked payload
+                    if (sender->last_ack_recv == sender->message_end) {  // we need to move the window & free the send q
+
+                        // sender->window_end = sender->window_end + SWS - 1;
+                        // if (sender->window_end > sender->message_end) {
+                        //     sender->window_end = sender->message_end;
+                        // }
                         sender->window_start = sender->last_ack_recv;
                         sender->awaiting_msg_ack = 0;
+
+                        if (sender->seq_no == sender->message_end) {
+                            sender->msg_sent = 1;   // last ack?
+                        }
                     }
                  }
             }
             else {
+                print_frame(inframe);
+                fprintf(stderr, "Computed CRC: %d\n", compute_crc8(raw_char_buf));
                 // drop ACK frame for CRC mismatch -- times out the frame
                 fprintf(stderr, "\nACK CRC MISMATCH\n");
             }
@@ -185,47 +191,6 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             // Free raw_char_buf
             free(raw_char_buf);
         }
-    }
-}
-
-void send_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
-    while (!sender->msg_sent && !(sender->awaiting_msg_ack)) {
-        // verify we haven't sent whole message & we don't need to wait for acks to move window
-        // fill sendq (WHEN SENDING)
-
-        struct timespec ts; // part of #include <“time.h”>
-        ts.tv_sec = 0;
-        ts.tv_nsec = 10000000; // 10 milliseconds
-
-        struct timeval send_time;
-        gettimeofday(&send_time, NULL);
-        while(sender->seq_no < sender->window_end) {
-            gettimeofday(&send_time, NULL);
-            sender->SendQ[(sender->seq_no) % SWS].frame = sender->frames[sender->seq_no];
-
-            sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec = send_time.tv_usec + 10000; // 0.01s timeout 
-            sender->SendQ[(sender->seq_no) % SWS].timeout.tv_sec = send_time.tv_sec;
-            if (sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec > 1000000) { // check for overflow
-                sender->SendQ[(sender->seq_no) % SWS].timeout.tv_sec++;
-                sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec -= 1000000;
-            //fprintf(stderr, "TIMEOUT OVERFLOW\n");
-            }
-            char* outgoing_charbuf = convert_frame_to_char(sender->SendQ[(sender->seq_no) % SWS].frame);
-            // SEND THE FRAME
-            ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
-            // increment seq_no
-            sender->seq_no = sender->seq_no + 1;
-
-            // sleep for .01s
-            nanosleep(&ts, NULL); // part of #include <“time.h”>
-        }
-        if (sender->seq_no == sender->message_end) {
-            // last frame sent
-            sender->msg_sent = 1;
-            fprintf(stderr, "LAST FRAME SENT\n");
-        }
-        sender->awaiting_msg_ack = 1; // wait for ack of 8 frames
-
     }
 }
 
@@ -240,18 +205,21 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     // Recheck the command queue length to see if stdin_thread dumped a command
     // on us
     input_cmd_length = ll_get_length(sender->input_cmdlist_head);
-    while (input_cmd_length > 0 && sender->msg_sent && !(sender->awaiting_handshake)) {
+
+    while (input_cmd_length > 0 && sender->msg_sent && !(sender->awaiting_handshake) && !(sender->awaiting_msg_ack)) {
 
         // peek to check if receiver has SYN-ACKed
         LLnode* ll_peeked_input = sender->input_cmdlist_head;
         Cmd* peeked_command = (Cmd* )ll_peeked_input->value;
 
-        fprintf(stderr, "handshake status:%d\n", sender->handshake[peeked_command->dst_id]);
+        // fprintf(stderr, "handshake status:%d\n", sender->handshake[peeked_command->dst_id]);
         // if no handshake, SYN-ACK
         if (sender->handshake[peeked_command->dst_id] == 0) {
             // SYN-ACK and sleep for syn-ack
             send_syn(sender, outgoing_frames_head_ptr, peeked_command->dst_id);
-            fprintf(stderr, "SENT SYN to %d\n", peeked_command->dst_id);
+            sender->awaiting_handshake = 1;
+            sender->awaiting_msg_ack = 1;
+            // fprintf(stderr, "SENT SYN to %d\n", peeked_command->dst_id);
         }
 
         else {
@@ -299,6 +267,8 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
             char* str_pos = outgoing_cmd->message; // pointer to where we are
 
+            fprintf(stderr, "NEW FRAMES:%d\n", new_frames);
+
             while (new_frames > 0) {
 
                 sender->frames[sender->seq_no] = malloc(sizeof(Frame));
@@ -312,15 +282,17 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 assert(sender->frames[sender->seq_no]);
 
                 build_frame(sender, outgoing_frames_head_ptr, sender->frames[sender->seq_no], char_buf, outgoing_cmd->src_id, outgoing_cmd->dst_id, sender->seq_no, remaining_bytes);
-                // printf("remaining_bytes:%d,seq_no:%d\n", remaining_bytes, i);
-                
-                if (remaining_bytes - FRAME_PAYLOAD_SIZE < 0) {
-                    remaining_bytes = 0;
-                } else {
+                fprintf(stderr, "message_length:%d, remaining_bytes:%d,seq_no:%d\n", msg_length, remaining_bytes, sender->seq_no);
+
+                if (remaining_bytes - FRAME_PAYLOAD_SIZE > 0) {
                     remaining_bytes -= FRAME_PAYLOAD_SIZE;
                 }
+                else {
+                    remaining_bytes = 0;
+                }
+                
                 fprintf(stderr, "SEQ_NO:%u\t", sender->seq_no);
-                sender->seq_no = sender->seq_no + 1;    // overflow should set 255 to 0
+                sender->seq_no = (uint8_t)(sender->seq_no + 1);    // overflow should set 255 to 0
 
                 new_frames --;                          // decrement to 0
                 
@@ -334,11 +306,68 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
 
             sender->seq_no = sender->window_start;  // set next frame in sequence to window start
+            sender->last_ack_recv = sender->seq_no; // set last ack received so we don't send old payloads
 
             fprintf(stderr, "SEQ_NO RESET:%d\n", sender->seq_no);
         }
     }
-    send_frames(sender, outgoing_frames_head_ptr); // send out frames we just built
+}
+
+void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr) {
+    struct timeval send_time;
+    if (!(sender->msg_sent) && !(sender->awaiting_handshake)) {
+        // verify we haven't sent whole message
+
+        // MOVE WINDOW IN HANDLE ACKS
+
+        if(sender->seq_no < sender->window_end && sender->seq_no < sender->message_end) {
+            gettimeofday(&send_time, NULL);
+            sender->SendQ[(sender->seq_no) % SWS].frame = sender->frames[sender->seq_no];
+
+            sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec = send_time.tv_usec + 90000; // 0.09s timeout 
+            sender->SendQ[(sender->seq_no) % SWS].timeout.tv_sec = send_time.tv_sec;
+            if (sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec > 1000000) { // check for overflow
+                sender->SendQ[(sender->seq_no) % SWS].timeout.tv_sec++;
+                sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec -= 1000000;
+            //fprintf(stderr, "TIMEOUT OVERFLOW\n");
+            }
+            char* outgoing_charbuf = convert_frame_to_char(sender->SendQ[(sender->seq_no) % SWS].frame);
+            // SEND THE FRAME
+            ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+
+            sender->awaiting_msg_ack = 1;   // wait for ack of 8 frames
+
+            sender->lfs = sender->seq_no;   // update last frame sent
+            // increment seq_no
+            sender->seq_no = sender->seq_no + 1;
+
+            fprintf(stderr, "Sent frame seq_no: %d\n", sender->lfs);
+
+            // sleep for .01s
+            nanosleep(&sender->ts, NULL); // part of #include <“time.h”>
+
+            if (sender->seq_no == sender->message_end) {
+                // last frame sent
+                sender->msg_sent = 1;
+                fprintf(stderr, "LAST FRAME SENT\n");
+            }
+        }
+    }
+}
+
+void resend_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
+    // last ack_received to seq_no
+    uint8_t seq = sender->last_ack_recv;
+    fprintf(stderr, "RESENDING: from ");
+    while (seq != sender->seq_no) {
+        char* outgoing_charbuf = convert_frame_to_char(sender->SendQ[seq % SWS].frame);
+        // SEND THE FRAME
+        ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+        fprintf(stderr, "%d\t", seq);
+        seq++; // increment until we get to our position in window
+    }
+    fprintf(stderr, "done\n");
+    // sleep for .01s
 }
 
 void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -351,12 +380,16 @@ void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
         if (sender->awaiting_msg_ack && sender->awaiting_handshake) { // make sure we're waiting for a SYNACK
             // SYN resend only
             Frame* outgoing_frame = sender->frames[sender->lfs];
-            add_frame(sender, outgoing_frames_head_ptr, outgoing_frame);
+            add_syn(sender, outgoing_frames_head_ptr, outgoing_frame);
         }
     }
-    timer = timeval_usecdiff(&curr_time, sender_get_next_expiring_timeval(sender));
-    if (sender-> awaiting_msg_ack && timer < 0) {
+    if (sender-> awaiting_msg_ack) {
+        timer = timeval_usecdiff(&curr_time, sender_get_next_expiring_timeval(sender));
+        // fprintf(stderr, "Timer in handle_timedout_frames: %d\n", timer);
+        // fprintf(stderr, "Time ms expiring_timeval %ld\n", sender_get_next_expiring_timeval(sender)->tv_usec);
+        if ( timer < 0) {
         resend_frames(sender, outgoing_frames_head_ptr);
+        }
     }
 }
 
@@ -436,6 +469,7 @@ void* run_sender(void* input_sender) {
 
         // Implement this
         handle_input_cmds(sender, &outgoing_frames_head);
+        add_frame(sender, &outgoing_frames_head);
 
         sender->active = (ll_get_length(outgoing_frames_head) > 0 || sender->awaiting_msg_ack) ? 1:0;
 

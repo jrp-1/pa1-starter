@@ -34,4 +34,7 @@ void copy_frame(Frame*, Frame*);
 // CRC-8 Computation
 uint8_t compute_crc8(char* frameChar);
 
+// debug print
+void print_frame(Frame* frame);
+
 #endif

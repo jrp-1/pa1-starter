@@ -81,11 +81,16 @@ struct Receiver_t {
     uint8_t last_frame_recv;            // last successful frame received
     uint8_t seq_no;                     // sequence number
     uint8_t largest_acc_frame;          // largest acceptable frame
-    Frame* frames[MAX_HOSTS][MAX_HOSTS]; // array of frames per sender
+
+    char* message[MAX_HOSTS];           // message for hosts
+
     struct RecvQ_slot {
         Frame* frame;
     } RecvQ[RWS];
     RecvQ recvQ[MAX_HOSTS][RWS];
+
+    uint8_t end_of_last_pl;             // end of last payload seq no
+
 };
 
 struct Sender_t {
@@ -119,6 +124,8 @@ struct Sender_t {
     //  check handshake status
     int awaiting_handshake;
     int handshake[MAX_HOSTS];
+
+    struct timespec ts; // part of #include <“time.h”>
 
     struct SendQ_slot {
         struct timeval timeout;
