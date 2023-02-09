@@ -128,7 +128,7 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             fprintf(stderr, "AWAITING ACK\n");
             // fprintf(stderr, "INCOMING ACK: %s\n", )
 
-            if (!compute_crc8(raw_char_buf)) { // check crc
+            // if (!compute_crc8(raw_char_buf)) { // check crc
 
             // HANDLE SYN-ACK
                 if(!(strcmp(inframe->data, "SYN-ACK"))) {
@@ -180,13 +180,13 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                         }
                     }
                  }
-            }
-            else {
-                print_frame(inframe);
-                fprintf(stderr, "Computed CRC: %d\n", compute_crc8(raw_char_buf));
-                // drop ACK frame for CRC mismatch -- times out the frame
-                fprintf(stderr, "\nACK CRC MISMATCH\n");
-            }
+            // }
+            // else {
+            //     print_frame(inframe);
+            //     fprintf(stderr, "Computed CRC: %d\n", compute_crc8(raw_char_buf));
+            //     // drop ACK frame for CRC mismatch -- times out the frame
+            //     fprintf(stderr, "\nACK CRC MISMATCH\n");
+            // }
 
             // Free raw_char_buf
             free(raw_char_buf);
