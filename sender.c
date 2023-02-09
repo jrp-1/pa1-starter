@@ -37,7 +37,7 @@ struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
         // SYN-ACK only uses .09s
         return &sender->timeout;
     }
-    if (sender->awaiting_msg_ack)
+    // if (sender->awaiting_msg_ack)
         // fprintf(stderr, "Getting Q timeout expiring_timeval\n");
     return &sender->SendQ[(sender->lfs) % SWS].timeout;
 }
