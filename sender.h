@@ -15,6 +15,10 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
+
+int nanosleep(const struct timespec *req, struct timespec *rem);
+// nanosleep fix
 
 void init_sender(Sender*, int);
 void* run_sender(void*);
