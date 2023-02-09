@@ -130,18 +130,18 @@ void handle_incoming_frames(Receiver* receiver,
                         }
                     }
                     else if (receiver->seq_no < receiver->last_frame_recv) {
+                        // WE SHOULDNT HAVE TO DO ANYTHING
                         // out of order frame sent but valid frame as long as > laf - 8
                         // check if we have frames in window
-                        uint8_t seq = receiver->seq_no;
-                        while (seq < receiver->largest_acc_frame) {
+                        // uint8_t seq = receiver->seq_no;
+                        // while (seq < receiver->largest_acc_frame) {
                             // go through the window
-                            if (receiver->recvQ[inframe->src_id][seq % RWS].frame != NULL) {
-                                seq++;
+                            if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame != NULL) {
+                                // seq++;
                                 // update our message
-                                memcpy((receiver->message[inframe->src_id] + seq * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
+                                memcpy((receiver->message[inframe->src_id] + receiver->seq_no * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
                             }
-                        }
-                        receiver->last_frame_recv = seq;
+                        // }
                         // cumulative ACK to most recent frame
                     }
 
@@ -176,11 +176,14 @@ void handle_incoming_frames(Receiver* receiver,
                 // fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
 
-                // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+                printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
-                if (inframe->remaining_msg_bytes == 0 && !receiver->pl_printed) {
+                if (inframe->remaining_msg_bytes == 0) { // && !receiver->pl_printed) {
                     // fprintf(stderr, "LAST FRAME RECV?\n");
                     // fprintf(stderr, "FIRST FRAME? %d\n", first_frame);
+                    // we need to make sure all payloads have been receieved
+                    // while ()
+
                     // print our message
                     printf("<RECV_%d>:[%s]\n", receiver->recv_id, (receiver->message[inframe->src_id] + receiver->end_of_last_pl * FRAME_PAYLOAD_SIZE));
 
