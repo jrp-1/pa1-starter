@@ -176,7 +176,7 @@ void handle_incoming_frames(Receiver* receiver,
                 // fprintf(stderr, "<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
 
-                printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+                // printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
 
                 if (inframe->remaining_msg_bytes == 0) { // && !receiver->pl_printed) {
                     // fprintf(stderr, "LAST FRAME RECV?\n");
