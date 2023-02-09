@@ -91,6 +91,8 @@ struct Receiver_t {
 
     uint8_t end_of_last_pl;             // end of last payload seq no
 
+    uint8_t pl_printed;
+
 };
 
 struct Sender_t {
