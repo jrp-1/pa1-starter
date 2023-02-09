@@ -77,6 +77,8 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
 
     memcpy(outgoing_frame->data, message, FRAME_PAYLOAD_SIZE);
 
+    // free(message);
+
     // Add CRC
     char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
     outgoing_frame->crc8 = compute_crc8(outgoing_charbuf);
@@ -86,7 +88,6 @@ void build_frame(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgo
 
     // printf("Built Frame: remaining_bytes: %d src:%d dst:%d seq_no:%d|\nmessage: %s||\n|crc8:%d\n", outgoing_frame->remaining_msg_bytes, outgoing_frame->src_id, outgoing_frame->dst_id, outgoing_frame->seq_no, outgoing_frame->data, outgoing_frame->crc8);
     // At this point, we don't need the outgoing_cmd
-    // free(message);
 }
 
 void add_syn(Sender* sender, LLnode** outgoing_frames_head_ptr, Frame* outgoing_frame) {
@@ -156,8 +157,11 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                     sender->last_ack_recv = inframe->seq_no;            // should handle cumulative ack
 
                     // fprintf(stderr, "WEHAVEACK\t\t%dlastack\t\tseq_no %d\t\tmessageend: %d\t\twindowend:%d\n", sender->last_ack_recv, inframe->seq_no, sender->message_end, sender->window_end);
+                    if (sender->window_end + SWS < sender->message_end) {
+                        sender->window_end = sender->last_ack_recv + SWS;   
+                    }
 
-                    if (sender->last_ack_recv == sender->message_end - 1) {
+                    if (sender->last_ack_recv == sender->message_end) {
 
                         // fprintf(stderr, "PAYLOADGONE\n");
                         // full payload sent & we have ack
@@ -166,27 +170,31 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
                     sender->window_start = sender->last_ack_recv;
 
-                    if (sender->window_end < sender->message_end - 1) {
-                        sender->window_end = (uint8_t)(sender->last_ack_recv + SWS - 1);
+                    if (sender->window_end < sender->message_end) {
+                        sender->window_end = (uint8_t)(sender->last_ack_recv + SWS);
                         // sender->window_start = sender->last_ack_recv;
                         // moving window end to 
                     }
 
 
+                    fprintf(stderr, "ACKED: %d\t MESSAGE END: %d\n", sender->last_ack_recv, sender->message_end);
+
 
                     // free(sender->SendQ[sender->last_ack_recv % SWS].frame); // free the acked payload
-                    if (sender->last_ack_recv == sender->message_end) {  // we need to move the window & free the send q
+                    if (sender->last_ack_recv == sender->message_end - 1) {  // we need to move the window & free the send q
 
-                        // sender->window_end = sender->window_end + SWS - 1;
-                        // if (sender->window_end > sender->message_end) {
-                        //     sender->window_end = sender->message_end;
-                        // }
+                        sender->window_end = sender->window_end + SWS;
+                        if (sender->window_end > sender->message_end) {
+                            sender->window_end = sender->message_end;
+                        }
                         sender->window_start = sender->last_ack_recv;
                         sender->awaiting_msg_ack = 0;
+                        sender->msg_sent = 1;
 
-                        if (sender->seq_no == sender->message_end) {
-                            sender->msg_sent = 1;   // last ack?
-                        }
+                        // if (sender->seq_no == sender->message_end) {
+                        //     sender->msg_sent = 1;   // last ack?
+                        // }
+                        fprintf(stderr, "last_ack_recv: %d\n", sender->last_ack_recv);
                     }
                  }
             // }
@@ -279,8 +287,10 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             // fprintf(stderr, "NEW FRAMES:%d\n", new_frames);
 
             while (new_frames > 0) {
+                if (sender->frames[sender->seq_no] == NULL) {
+                    sender->frames[sender->seq_no] = malloc(sizeof(Frame));
+                }
 
-                sender->frames[sender->seq_no] = malloc(sizeof(Frame));
                 char char_buf[FRAME_PAYLOAD_SIZE]; // buffer for each payload
                 
                 memcpy(char_buf, str_pos, FRAME_PAYLOAD_SIZE);
@@ -301,9 +311,9 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 }
                 
                 // fprintf(stderr, "SEQ_NO:%u\t", sender->seq_no);
-                sender->seq_no = (uint8_t)(sender->seq_no + 1);    // overflow should set 255 to 0
+                sender->seq_no = sender->seq_no + 1;    // overflow should set 255 to 0
 
-                new_frames --;                          // decrement to 0
+                new_frames--;                          // decrement to 0
                 
             }
             free(outgoing_cmd);
@@ -311,7 +321,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
             sender->message_end = sender->seq_no;   // last frame in message;
 
-            // fprintf(stderr, "NEW FRAMES:%d\tWINDOW END:%d\tSEQ NO:%d\tMESSAGE END:%d\n", new_frames, sender->window_end, sender->seq_no, sender->message_end);
+            fprintf(stderr, "NEW FRAMES:%d\tWINDOW END:%d\tSEQ NO:%d\tMESSAGE END:%d\n", new_frames, sender->window_end, sender->seq_no, sender->message_end);
 
 
             sender->seq_no = sender->window_start;  // set next frame in sequence to window start
