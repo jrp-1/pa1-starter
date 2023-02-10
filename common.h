@@ -79,9 +79,9 @@ struct Receiver_t {
     int handshake[MAX_HOSTS];
                                         // ARRAY FOR EACH HOST
 
-    uint8_t last_frame_recv;            // last successful frame received
-    uint8_t seq_no;                     // sequence number
-    uint8_t largest_acc_frame;          // largest acceptable frame
+    uint8_t last_frame_recv[MAX_HOSTS];            // last successful frame received
+    uint8_t seq_no[MAX_HOSTS];                     // sequence number
+    uint8_t largest_acc_frame[MAX_HOSTS];          // largest acceptable frame
 
     char* message[MAX_HOSTS];           // message for hosts
                                     // NEEDS TO BE AN ARRAY FOR EVERY SENDER WITH A HANDSHAKE
@@ -91,9 +91,9 @@ struct Receiver_t {
     } RecvQ[RWS];
     RecvQ recvQ[MAX_HOSTS][RWS];
 
-    uint8_t end_of_last_pl;             // end of last payload seq no
+    uint8_t end_of_last_pl[MAX_HOSTS];             // end of last payload seq no
 
-    uint8_t pl_printed;
+    uint8_t pl_printed[MAX_HOSTS];
 
 };
 

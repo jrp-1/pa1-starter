@@ -7,16 +7,15 @@ void init_receiver(Receiver* receiver, int id) {
     receiver->input_framelist_head = NULL;
     receiver->active = 1;
 
-    receiver->last_frame_recv = 0;
-    receiver->seq_no = 0;
-    receiver->largest_acc_frame = WINDOW_SIZE - 1;
-
     for (int i = 0; i < MAX_HOSTS; i++) {
+        receiver->last_frame_recv[i] = 0;
+        receiver->seq_no[i] = 0;
+        receiver->largest_acc_frame[i] = RWS - 1;
         receiver->handshake[i] = 0;
+        receiver->end_of_last_pl[i] = 0;
+        receiver->pl_printed[i] = 0;
     }
 
-    receiver->end_of_last_pl = 0;
-    receiver->pl_printed = 0;
     // receiver->message = malloc(FRAME_PAYLOAD_SIZE * UINT8_MAX); // huge string
 }
 
@@ -110,30 +109,30 @@ void handle_incoming_frames(Receiver* receiver,
                 // error : NO HANDSHAKE
                 fprintf(stderr, "NO HANDSHAKE FROM %d to receiver %d\n", inframe->src_id, receiver->recv_id);
             }
-            else if (inframe->seq_no <= receiver->largest_acc_frame || ((uint8_t)(inframe->seq_no + 8) <= (uint8_t)(receiver->largest_acc_frame + 8))) {
+            else if (inframe->seq_no <= receiver->largest_acc_frame[inframe->src_id] || ((uint8_t)(inframe->seq_no + 8) <= (uint8_t)(receiver->largest_acc_frame[inframe->src_id]  + 8))) {
                 // TODO: edge case largest_acc_frame becomes 0 and seq_no is 255, etc. -- add 8 to each to check so they rotate around
 
 
                 
                 // print_frame(inframe);
                 // CHECK if we already have the frame! -- ALSO need to check our buffer
-                if (receiver->last_frame_recv == inframe->seq_no) {
+                if (receiver->last_frame_recv[inframe->src_id] == inframe->seq_no) {
                     // SAME FRAME AS LAST TIME
                     if (receiver->recvQ[inframe->src_id][inframe->seq_no % RWS].frame == NULL) {
                         // it's not saved
-                        receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = malloc(sizeof(Frame));
+                        receiver->recvQ[inframe->src_id][inframe->seq_no % RWS].frame = malloc(sizeof(Frame));
                     }
-                    copy_frame(receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame, inframe);
+                    copy_frame(receiver->recvQ[inframe->src_id][receiver->seq_no[inframe->src_id] % RWS].frame, inframe);
                     // update our message
                     memcpy((receiver->message[inframe->src_id] + inframe->seq_no * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
                 }
                 else  {
 
-                    receiver->seq_no = inframe->seq_no;
+                    receiver->seq_no[inframe->src_id] = inframe->seq_no;
                     if (receiver->seq_no > receiver->last_frame_recv + 1) {
                         // out of order frame sent -- 
                         if (receiver->seq_no <= receiver->largest_acc_frame) {
-                            memcpy((receiver->message[inframe->src_id] + receiver->seq_no * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
+                            memcpy((receiver->message[inframe->src_id] + receiver->seq_no[inframe->src_id] * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
                         }
                     }
                     else if (receiver->seq_no < receiver->last_frame_recv) {
@@ -143,10 +142,10 @@ void handle_incoming_frames(Receiver* receiver,
                         // uint8_t seq = receiver->seq_no;
                         // while (seq < receiver->largest_acc_frame) {
                             // go through the window
-                            if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame != NULL) {
+                            if (receiver->recvQ[inframe->src_id][receiver->seq_no[inframe->src_id] % RWS].frame != NULL) {
                                 // seq++;
                                 // update our message
-                                memcpy((receiver->message[inframe->src_id] + receiver->seq_no * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
+                                memcpy((receiver->message[inframe->src_id] + receiver->seq_no[inframe->src_id] * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
                             }
                         // }
                         // cumulative ACK to most recent frame
@@ -154,8 +153,8 @@ void handle_incoming_frames(Receiver* receiver,
 
                     else {
                         // frame in order, update largest acc frame?
-                        receiver->last_frame_recv = inframe->seq_no;
-                        receiver->largest_acc_frame = receiver->last_frame_recv + RWS - 1;
+                        receiver->last_frame_recv[inframe->src_id] = inframe->seq_no;
+                        receiver->largest_acc_frame[inframe->src_id] = receiver->last_frame_recv[inframe->src_id] + RWS - 1;
 
                         // update our message
                         memcpy((receiver->message[inframe->src_id] + inframe->seq_no * FRAME_PAYLOAD_SIZE), inframe->data, FRAME_PAYLOAD_SIZE);
@@ -173,7 +172,7 @@ void handle_incoming_frames(Receiver* receiver,
                 // if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame == NULL) {
                 //     receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = malloc(sizeof(Frame));
                 // }
-                copy_frame(receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame, inframe);
+                copy_frame(receiver->recvQ[inframe->src_id][receiver->seq_no[inframe->src_id] % RWS].frame, inframe);
 
 
                 // receiver->frames[inframe->src_id][receiver->seq_no] = malloc(sizeof(Frame));
@@ -191,15 +190,15 @@ void handle_incoming_frames(Receiver* receiver,
                     // while ()
 
                     // print our message
-                    printf("<RECV_%d>:[%s]\n", receiver->recv_id, (receiver->message[inframe->src_id] + receiver->end_of_last_pl * FRAME_PAYLOAD_SIZE));
+                    printf("<RECV_%d>:[%s]\n", receiver->recv_id, (receiver->message[inframe->src_id] + receiver->end_of_last_pl[inframe->src_id] * FRAME_PAYLOAD_SIZE));
 
                     // set our last payload position
-                    receiver->end_of_last_pl = inframe->seq_no + 1;
+                    receiver->end_of_last_pl[inframe->src_id] = inframe->seq_no + 1;
                     // receiver->pl_printed = 1;
                 }
 
                 // only ack the last in-order frame received
-                send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv, inframe->src_id);
+                send_ack(receiver, outgoing_frames_head_ptr, receiver->last_frame_recv[inframe->src_id], inframe->src_id);
 
 
                 free(inframe);
