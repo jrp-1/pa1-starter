@@ -121,7 +121,7 @@ struct Sender_t {
     int msg_sent;
     struct timeval time_sent; // time last frame was sent
     struct timeval timeout;   // timeout (expiring)
-    Frame* frames[MAX_HOSTS]; // array of frames
+    Frame* frames[MAX_HOSTS]; // array of frame pointers
 
     //  check handshake status
     int awaiting_handshake;
