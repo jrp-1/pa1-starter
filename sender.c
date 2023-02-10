@@ -350,6 +350,7 @@ void add_frame(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 sender->SendQ[(sender->seq_no) % SWS].timeout.tv_usec -= 1000000;
             //fprintf(stderr, "TIMEOUT OVERFLOW\n");
             }
+            assert(sender->SendQ[(sender->seq_no) % SWS].frame);
             char* outgoing_charbuf = convert_frame_to_char(sender->SendQ[(sender->seq_no) % SWS].frame);
             // SEND THE FRAME
             ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);

@@ -53,6 +53,11 @@ void send_synack(Receiver* receiver, LLnode** outgoing_frames_head_ptr, uint8_t 
         receiver->message[send_id] = malloc(sizeof(char)  * FRAME_PAYLOAD_SIZE * UINT8_MAX);
     }
    
+   for (int i = 0; i < RWS; i++) {
+        // allocate the buffer window
+        receiver->recvQ[send_id][i].frame = malloc(sizeof(Frame));
+
+   }
 
     // fprintf(stderr, "Sending SYN-ACK to%d \n", outgoing_frame->dst_id);
 
@@ -160,13 +165,12 @@ void handle_incoming_frames(Receiver* receiver,
                 }
 
                 // Free raw_char_buf
-                free(raw_char_buf);
+                // free(raw_char_buf);
 
                 // add to window
-                if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame == NULL) {
-                    receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = malloc(sizeof(Frame));
-                    // receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = receiver->frames[inframe->src_id][receiver->seq_no];
-                }
+                // if (receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame == NULL) {
+                //     receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame = malloc(sizeof(Frame));
+                // }
                 copy_frame(receiver->recvQ[inframe->src_id][receiver->seq_no % RWS].frame, inframe);
 
 
