@@ -77,12 +77,14 @@ struct Receiver_t {
 
     //  check handshake status
     int handshake[MAX_HOSTS];
+                                        // ARRAY FOR EACH HOST
 
     uint8_t last_frame_recv;            // last successful frame received
     uint8_t seq_no;                     // sequence number
     uint8_t largest_acc_frame;          // largest acceptable frame
 
     char* message[MAX_HOSTS];           // message for hosts
+                                    // NEEDS TO BE AN ARRAY FOR EVERY SENDER WITH A HANDSHAKE
 
     struct RecvQ_slot {
         Frame* frame;

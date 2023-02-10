@@ -77,6 +77,8 @@ void handle_incoming_frames(Receiver* receiver,
     //       and print the final message when all frames belonging to a message have been received.
     //    7) ACK the received frame
 
+    // TRACK ACKS BY SENDER & LFS, ETC.
+
     int incoming_frames_length = ll_get_length(receiver->input_framelist_head);
     while (incoming_frames_length > 0) {
         // Pop a node off the front of the link list and update the count
